@@ -1,7 +1,5 @@
-(* The plan for this program is to read a series of chess boards from a file,
-   and then determine if either party is in check.*)
-
-(* Stretch goals are to check for mate and to check that the board is valid. *)
+(* Basically, what this program does is read a series of chess boards from
+   a file called chess.in, and determine if anyone is in check. *)
 
 (* INPUT FORMAT *)
 (* The first line is a single integer saying how many chess boards will be
@@ -16,149 +14,165 @@
    R/r = Rook
    B/b = Bishop
    N/n = kNight
-   Everything else is unoccupied.` 
+   _   = Unoccupied 
 *)
 
 (* Getting Core.Std installed was much harder than it needed to be.
    I have my ocamlinit set up, but because of the issue described at
    http://stackoverflow.com/q/20900465/ocaml-doesnt-load-ocamlinit-in-script-mode 
-   I need to put these four here, otherwise Core won't be loaded
+   I need to put these four here, otherwise Core won't be loaded.
+   I might look into build systes for OCaml, in case one of them has a solution.
 *)
 #use "topfind"
 #thread
 #require "core"
 open Core.Std
 
-let get_exn a =
-  match a with
+let get_exn aOption =
+  (* Convenience function for getting the thing from an option, when we 
+     can safely assume it's not None. *)
+  match aOption with
     Some x -> x
    |_   -> invalid_arg "get_exn";;
 
-let isValidSpot aSpot =
+let is_valid_spot aSpot =
+  (* is spot on the 8x8 chess board? *)
   let (tRow, tCol) = aSpot in
   tRow > -1 && tRow < 8 && tCol < 8 && tCol > -1;;
 
-let rec findPiece board piece row =
-  (* Return an (int,int) pair saying the coordinates of piece in board.
+let rec find_king aBoard aKing aRow =
+  (* Return an (int,int) pair saying the coordinates of aKing.
      Die with an exception if not found *)
-  (* TODO Handle pieces that show up more than once, right now I'm just using
-     it for kings. *)
-  try
-    (row, String.index_exn (List.hd_exn board ) piece);
-  with e ->
-    findPiece (List.tl_exn board) piece (row + 1);;
+  match String.index (List.hd_exn aBoard) aKing with
+    Some tCol -> (aRow, tCol);
+    |_ -> find_king (List.tl_exn aBoard) aKing (aRow + 1);;
 
-let getPieceAtSpot aBoard aSpot =
+let get_piece_at_spot aBoard aSpot =
   let (tRow, tCol) = aSpot in
   let tRow = get_exn(List.nth aBoard tRow) in
   String.get tRow tCol;;
 
-let addPos aPos aOffset =
+let add_pos aPos aOffset =
   let (tRow, tCol) = aPos in
   let (tDeltaY, tDeltaX) = aOffset in
   (tRow + tDeltaY, tCol + tDeltaX);; 
 
-let getTeam aPiece =
+let get_team aPiece =
   match (Char.is_uppercase aPiece, Char.is_lowercase aPiece) with
     (true, false)  -> 1
    |(false, true) -> -1
    |_             -> invalid_arg "not a letter";;
 
-let onTeam aTeam aPiece =
-  aTeam = getTeam aPiece;;
+let on_team aTeam aPiece =
+  aTeam = get_team aPiece;;
 
-let isPawn aPiece =
-  aPiece = 'p' || aPiece = 'P';;
+let is_pawn aPiece =
+  Char.uppercase aPiece = 'P';;
 
-let isRook aPiece =
-  aPiece = 'r' || aPiece = 'R';;
+let is_rook aPiece =
+  Char.uppercase aPiece = 'R';;
 
-let isBishop aPiece =
-  aPiece = 'b' || aPiece = 'B';;
+let is_bishop aPiece =
+  Char.uppercase aPiece = 'B';;
 
-let isQueen aPiece =
-  aPiece = 'q' || aPiece = 'Q';;
+let is_queen aPiece =
+  Char.uppercase aPiece = 'Q';;
 
-let isKnight aPiece =
-  aPiece = 'n' || aPiece = 'N';;
+let is_knight aPiece =
+  Char.uppercase aPiece = 'N';;
 
-let movesDiagonal aPiece =
-  isBishop aPiece || isQueen aPiece;;
+let is_empty_spot aPiece =
+   aPiece = '_';;
 
-let movesSideways aPiece =
-  isRook aPiece || isQueen aPiece;;
+let moves_diagonally aPiece =
+  is_bishop aPiece || is_queen aPiece;;
 
-let getTeamName aTeam =
+let moves_sideways aPiece =
+  is_rook aPiece || is_queen aPiece;;
+
+let get_team_name aTeam =
+  (* The reason 1 is Black and -1 is white is so that they are the same as the
+     movement of the enemy pawns *) 
   match aTeam with
     1   -> "Black" ;
    |(-1)-> "White" ;
-   |_   -> invalid_arg "getTeamName";;
+   |_   -> invalid_arg "get_team_name";;
 
-let printCheckWarning aTeam aPiece =
-  print_string (getTeamName aTeam);
+let print_check_warning aTeam aPiece =
+  (* Print [Black|White] is in check from [p|r|q|n|b]. *)
+  print_string (get_team_name aTeam);
   print_string " is in check from ";
   print_char aPiece;
   print_endline ".";;
 
-let rec lookForCheckHelper aBoard aLoc aTeam aFilter aLoop aOffset =
-  let tLoc = addPos aLoc aOffset in
-  if isValidSpot tLoc then
+let rec look_for_check_helper aBoard aLoc aTeam aFilter aLoop aOffset =
+  (* This is the workhorse of the entire program. Take an offset fro the King,
+     use aFilter to see if anyone there is capable of moving that way, if so 
+     print a warning, then continue in that direction if we can and should. *)
+  let tLoc = add_pos aLoc aOffset in
+  if is_valid_spot tLoc then
   begin
-    let tPiece = getPieceAtSpot aBoard tLoc in
-    if aFilter tPiece && getTeam tPiece <> aTeam then
-      printCheckWarning aTeam tPiece;
-    if aLoop then
-      lookForCheckHelper aBoard tLoc aTeam aFilter aLoop aOffset;
-  end
+    let tPiece = get_piece_at_spot aBoard tLoc in
+    if aFilter tPiece && get_team tPiece <> aTeam then
+      print_check_warning aTeam tPiece;
+    if aLoop && false = (is_empty_spot tPiece) then
+      look_for_check_helper aBoard tLoc aTeam aFilter aLoop aOffset;
+  end;
+  ()
   ;;
 
-let lookForKnightCheck aBoard aKingPos aTeam =
+let look_for_knight_check aBoard aKingPos aTeam =
+  (* Is there a knight one move away? *)
   let tMoves = [(-2,-1);(-2,1);(2,-1);(2,1);(-1,-2);(-1,2);(1,-2);(1,2)] in
-  List.map tMoves (lookForCheckHelper aBoard aKingPos aTeam isPawn false);;
+  List.iter tMoves (look_for_check_helper aBoard aKingPos aTeam is_knight false);;
 
-let lookForPawnCheck aBoard aKingPos aTeam =
+let look_for_pawn_check aBoard aKingPos aTeam =
+  (* Is there a pawn one move away? *)
   let tMoves = [(aTeam,-1);(aTeam,1)] in
-  List.map tMoves (lookForCheckHelper aBoard aKingPos aTeam isPawn false);;
+  List.iter tMoves (look_for_check_helper aBoard aKingPos aTeam is_pawn false);;
 
-let lookForRookCheck aBoard aKingPos aTeam =
+let look_for_rook_check aBoard aKingPos aTeam =
+  (* Is there a rook or a queen in a straight unblocked line from the king? *)
   let tMoves = [(0,-1);(-1,0);(1,0);(0,1)] in
-  List.map tMoves (lookForCheckHelper aBoard aKingPos aTeam movesSideways true);;
+  List.iter tMoves (look_for_check_helper aBoard aKingPos aTeam moves_sideways true);;
 
-let lookForBishopCheck aBoard aKingPos aTeam =
+let look_for_bishop_check aBoard aKingPos aTeam =
+  (* Is there a bishop or a queen in a straight unblocked line from the king? *)
   let tMoves = [(-1,-1);(-1,1);(1,-1);(1,1)] in
-  List.map tMoves (lookForCheckHelper aBoard aKingPos aTeam movesDiagonal true);;
+  List.iter tMoves (look_for_check_helper aBoard aKingPos aTeam moves_diagonally true);;
 
-let checkForCheck aBoard aKing =
-  let tKingPos = findPiece aBoard aKing 0 in
-  let tTeam = getTeam aKing in
-  lookForKnightCheck aBoard tKingPos tTeam;
-  lookForPawnCheck aBoard tKingPos tTeam;
-  lookForRookCheck aBoard tKingPos tTeam;
-  lookForBishopCheck aBoard tKingPos tTeam;;
+let check_for_check aBoard aKing =
+  (* Is there someone who can kill aKing? *)
+  let tKingPos = find_king aBoard aKing 0 in
+  let tTeam = get_team aKing in
+  look_for_knight_check aBoard tKingPos tTeam;
+  look_for_pawn_check aBoard tKingPos tTeam;
+  look_for_rook_check aBoard tKingPos tTeam;
+  look_for_bishop_check aBoard tKingPos tTeam;;
 
-let processBoard aFile =
-  (* Take the board and check for checks.*)
+let process_board aFile =
+  (* Print and then discard comment.*)
   print_endline (List.hd_exn aFile);
-  (* Discard seperator line *)
   let tFile = List.tl_exn aFile in
-  checkForCheck tFile 'K';
-  checkForCheck tFile 'k';;
+  (* Check both teams for being in check. *)
+  check_for_check tFile 'K';
+  check_for_check tFile 'k';;
 
-let rec processBoards aFile =
+let rec process_boards aFile =
   let (tBoard,tFile) = List.split_n aFile 9 in
-  processBoard tBoard;
+  process_board tBoard;
   match tFile with
-    [] -> true;
-    |_ -> processBoards tFile;
+    [] -> ();
+    |_ -> process_boards tFile;
   ;;
 
 let main () =
   (* I think it looks better organized with an explicit main *)
-  let kFile = "chess.txt" in
+  let kFile = "chess.in" in
   let tFile = In_channel.read_lines kFile in
   (* Get the number of boards to process and start looping over them. *)
   let _ = int_of_string (List.hd_exn tFile) in
   let tFile = List.tl_exn tFile in
-  processBoards tFile;;
+  process_boards tFile;;
 
 main ();
