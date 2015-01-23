@@ -1,11 +1,10 @@
-class player name_init =
+class player (name_init : string) =
   object
     val name = name_init
     val mutable total = 0
     val mutable turn_score = 0
     method get_name = name
     method get_score = total
-    method print_name = print_endline name
     method end_turn = total <- total + turn_score;
                       turn_score <- 0;
     method has_won = total >= 100;
