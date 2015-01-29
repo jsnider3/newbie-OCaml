@@ -9,17 +9,17 @@
 open Core.Std
 
 type expr = N of int | F of float| Add of (expr * expr) | Mul of (expr * expr) | Sub of (expr * expr)
-		|And of (expr * expr) | Or of (expr * expr) |Not of expr |If of (expr * expr * expr) |Equal of (expr * expr) | B of bool
-		|Lam of (kind * string * expr) | App of (expr * expr) | Var of string |Tuple of expr list
-		|List of (expr * expr) 
-		|Unit | Done (* Remove and replace with Unit *)
-		|Concat of (expr * expr) | Get of (expr * expr) | Head of expr | Tail of expr
-		|Record of (string * expr) list | GetRec of (string * expr)
-		|Fix of expr | LetN of ((string * expr) list * expr)  
-		|TL of expr| TR of expr| Case of (expr * expr * expr) |As of (expr * kind) 
-		|Seq of expr list |Set of (kind * string * expr) |Lookup of string |While of (expr * expr)
-		|Top | Bottom
-		|C of char
+    |And of (expr * expr) | Or of (expr * expr) |Not of expr |If of (expr * expr * expr) |Equal of (expr * expr) | B of bool
+    |Lam of (kind * string * expr) | App of (expr * expr) | Var of string |Tuple of expr list
+    |List of (expr * expr) 
+    |Unit | Done (* Remove and replace with Unit *)
+    |Concat of (expr * expr) | Get of (expr * expr) | Head of expr | Tail of expr
+    |Record of (string * expr) list | GetRec of (string * expr)
+    |Fix of expr | LetN of ((string * expr) list * expr)  
+    |TL of expr| TR of expr| Case of (expr * expr * expr) |As of (expr * kind) 
+    |Seq of expr list |Set of (kind * string * expr) |Lookup of string |While of (expr * expr)
+    |Top | Bottom
+    |C of char
 
 (* I would prefer to call kind "type", but that is very much not allowed in OCaml.*)
 and kind = TInt | TReal | TBool | TChar | TFunc of (kind * kind) | TTuple of kind list | TyL of kind |
@@ -27,16 +27,36 @@ and kind = TInt | TReal | TBool | TChar | TFunc of (kind * kind) | TTuple of kin
            TDone | TTop | TBottom | TStr
 
 type value = VB of bool | VC of char | VTuple of value list | VList of (value * value) | VUnit | VL of value | VR of value | VDone|
-			       VN of int |VF of float| VLam of expr | VRecord of (string * expr) list | VTop | VBottom
+             VN of int |VF of float| VLam of expr | VRecord of (string * expr) list | VTop | VBottom
 
-type env_type = (string, int) Hashtbl.t;;
-(*type env = Hashtbl String Value;;*)
+type env_type = (string, value) Hashtbl.t;;
+type type_map = (string, kind) Hashtbl.t;;
+
 (*
-	typecheck ::expr                  ->kind
-				suspicious expression ->type it returns
-	Makes sure an expression uses types correctly and either returns 
-	a value of a single type or  returns an error.
-*)			
+  sub_type ::kind->kind->bool
+*)
+let rec subtype t1 t2 = match  (t1, t2) with
+                      (TInt, TReal) ->true
+                      |(TBottom, _) -> true
+                      |(_, TTop) -> true
+                      |((TRecord rec1),(TRecord rec2)) -> raise (Failure "Not yet implemented: Should be length(rec2 setminus rec1) = 0") 
+                      |(TFunc(a,b),TFunc(c,d)) -> subtype c a && subtype b d
+                      |(a,b) -> a = b;;
+
+(*
+  common_type ::kind->kind->kind
+*)
+let common_type t1 t2 = match (t1, t2) with
+                          ((TRecord a),(TRecord b)) -> raise (Failure "TODO TRecord(intersect a b)")
+                          |(a,b) -> if subtype a b then b else if subtype b a then a else TTop
+
+let echo_first f s = f;;
+(*
+  typecheck ::expr                  ->kind
+        suspicious expression ->type it returns
+  Makes sure an expression uses types correctly and either returns 
+  a value of a single type or  returns an error.
+*)      
 (*typecheck ::expr->State TEnv kind --[(string,kind)]->([(string,kind)],kind)*)
 let rec typecheck expr env = match expr with
                         C _ -> TChar
@@ -47,178 +67,156 @@ let rec typecheck expr env = match expr with
                        |Equal (_,_) -> TBool
                        |Add (a, b) -> typecheck (Sub (a,b)) env
                        |Mul (a, b) -> typecheck (Sub (a,b)) env
-                       |Sub (a, b) -> raise (Failure "Not yet implemented")
+                       |Sub (a, b) -> if subtype(typecheck a env) TReal && subtype(typecheck b env) TReal 
+                                        then common_type (typecheck a env)(typecheck b env) 
+                                        else raise (Failure "Can't do arithmetic on non-numbers.")
                        |Or  (a,b) -> typecheck (And (a, b)) env
-                       |And (a, b) -> raise (Failure "Not yet implemented")
+                       |And (a, b) -> if subtype(typecheck a env) TBool && subtype(typecheck b env) TBool 
+                                        then common_type (typecheck a env)(typecheck b env) 
+                                        else raise (Failure "Can't do bool ops on non-bools.")
                        |Done -> raise (Failure "TODO Remove done") (* TDone *)
-                       |_ -> raise (Failure "Not yet implemented")
-      
-                    
-(*
-typecheck (Sub a b)= do
-	env<-get
-	if subtype(simplify_type(evalState(typecheck a)env)) TReal &&subtype(simplify_type(evalState(typecheck b)env)) TReal  then return$common_type(evalState(typecheck a)env)(evalState(typecheck b)env)  else error $"Typecheck failure for arithmetic operation. We have "++show (a,b)++"."
-typecheck (And a b)= do
-	env<-get
-	if subtype(simplify_type(evalState(typecheck a)env)) TBool &&simplify_type(evalState(typecheck b)env)==TBool  then typecheck a  else error $"Typecheck failure for boolean operation. We have "++show (a,b)++"."
-typecheck (If a b c)= do
-	env<-get
-	if evalState(typecheck a)env==TBool 
-						then if execState(typecheck b)env  ==execState(typecheck c)env
-								then return $common_type(evalState(typecheck b)env)(evalState(typecheck c)env)
-								else error "If clauses change state inappropriately."
-						else error "Conditions for if must be boolean type"
-typecheck (Not a)= do
-	env<-get
-	if simplify_type(evalState(typecheck a)env)==TBool then typecheck a  else error $"Typecheck failure for not. We have "++show a++"."
-typecheck (Tuple a) = do
-	env<-get
-	return(TTuple (zipWith (evalState)(map typecheck a)(replicate (length a)env )))
-typecheck (App (Fix lam)var)=do
-	env<-get
-	case(evalState(typecheck (Fix lam))env)of
-								((from:->to):->(from1:->to1))->if subtype(evalState(typecheck var )env)from&&subtype from from1&&subtype to1 to then do{put $execState(purge_env(lam))env; return to1} else error $"Input to a lambda is of inappropriate type. We have "++show(evalState(typecheck var )env)++" but want "++show from++"."
-								_ -> error "Typecheck failed, at an Application to a fix."
-typecheck (App lam var)= do
-	env<-get
-	case (evalState(typecheck lam)env ) of
-					(from :-> to)->if subtype(evalState(typecheck var)env)from then do{put $execState(purge_env(lam))env; return to} else error $"Input to a lambda is of inappropriate type. We have "++show(evalState(typecheck var )env)++" but want "++show from++"."
-					_ -> error "Application is done to a non-lambda."
-typecheck (Lam t s b)= do
-	env<-get
-	put $(Map.insert s t env)
-	env<-get
-	case evalState(typecheck b)env of
-							(x)->if evalState(free(s,t))env then return(t:->x)else error "Attempt to change type of var."
-typecheck (Concat a b)=do
-	env<-get
-	case (evalState(typecheck a)env ,evalState(typecheck b)env ) of
-							(TList type1 alen,TList type2 blen) ->return(TList (common_type type1 type2) (alen+blen))
-							_ -> error "Can't concat non-lists."
-typecheck (Get index list)=do
-	env<-get
-	case(evalState(typecheck index)env ,evalState(typecheck list)env ) of
-							(TInt,TList type1 _)-> return(type1)
-							_ -> error "Get requires a list to work with."
-typecheck (Head a)=do
-	env<-get
-	case evalState(typecheck a)env of
-						(TList type1 _)->return(type1)
-						_ -> error "Head only works on pairs and lists."
-typecheck (Rest a)=do
-	env<-get
-	case evalState(typecheck a)env of
-						(TList listType len)->case (a) of
-									(List _ Null) ->return(TNull) --I'm not sure if I should return null if they try to call rest on the end of the list or crash.
-									(List _ _) -> return(TList listType (len-1))
-						_ -> error "Rest only works on pairs and lists."
-typecheck (List head rest)=do
-	env<-get
-	case evalState(typecheck head)env of
-							(TNull) -> error "Lists cannot be headed by null."
-							(TList _ _)-> error "Lists cannot be headed by lists."
-							(goodType)->case evalState(typecheck rest )env of
-										(TNull)->return $TList goodType 1
-										(TList type2 len)->return $TList (common_type goodType type2) (len+1)
-										(type2)-> error "List was terminated inappropriately."
-typecheck (Fix (Lam t s b))= (typecheck (Lam t s b))-- :->(typecheck (Lam t s b))--DEBUG
-typecheck (Fix something)=error$"Typecheck for fix failed. The body is "++show something++"."
-typecheck (Var st) = do
-	env<-get
-	lookup_type st
-typecheck (As expr ty)= do
-	env<-get
-	case (expr,ty) of
-								(TL a,TSum left right)->if subtype(evalState(typecheck a)env)left then if(left==right) then error "Sums must be two different types. TL" else return(TSum left right) else error"Typecheck of as failed. TL"
-								(TR b,TSum left right)->if subtype(evalState(typecheck b)env)right then if(left==right) then error "Sums must be two different types. TR" else return(TSum left right) else error"Typecheck of as failed. TR"
-typecheck (Case expr left right)=do
-	env<-get
-	case evalState(typecheck expr)env of
-										TSum l r-> case (evalState(typecheck left)env,evalState(typecheck right)env) of
-														(a:->b,c:->d)->if(subtype l a&&subtype r c)then return (common_type b d) else error$"Typechecking failure for case lambda."++show (a:->b)++" "++show (c:->d)++" "++show (TSum l r)
-														_->error$"Case doesn't have two lambdas."
-										_->error $"Case doesn't typecheck to sum."
-typecheck(Seq [a])=typecheck a
-typecheck(Seq (a:b))=do
-	env<-get
-	put $execState(typecheck a)env
-	typecheck (Seq b)
-typecheck(While guard body)=do
-	env<-get
-	case evalState(typecheck guard)env of
-									(TBool)-> (typecheck body) `seq` return(TDone)
-									_->error $"Guard must be boolean"
-typecheck(Lookup name)=do
-	env<-get
-	(lookup_type name)
-typecheck(Set ty name expr)=do
-	env<-get
-	if(subtype(evalState(typecheck expr)env)ty)then if evalState(free(name,ty))env then do {put $(Map.insert name ty env);return TDone}else error "Attempt to change type of variable." else error $"Set is assigning a non"++show ty++" to a "++show ty++" variable."
-typecheck(Record fields)= do
-	env<-get
-	return(TRecord $ zip(map fst fields)((zipWith evalState(map typecheck(map snd fields))(replicate (length fields)env))))
-typecheck(GetRec str (Record[(k,v)]))=if(k==str)then typecheck v  else error $"Record doesn't possess the specified field."
-*)
+                       |If (a, b, c) -> if subtype(typecheck a env) TBool 
+                                          then common_type(typecheck b env)(typecheck c env) (*TODO DEBUG Original code checked that neither changed the state. *)
+                                          else raise (Failure "If has non-bool condition")
+                       |Not a -> if subtype(typecheck a env) TBool then TBool else raise (Failure "Not of non-bool")                                                  
+                       (* FIXME |Tuple a -> TTuple (List.map (List.init (List.length a) (echo_first env))(typecheck a)) *)
+                       |Head a -> begin
+                                  match typecheck a env with
+                                    TList (type1, _) -> type1
+                                    |_ -> raise (Failure "Head only works on lists.")
+                                  end
+                       |Tail a -> begin
+                                  match typecheck a env with
+                                    TList (listType, len) -> begin
+                                                             match a with
+                                                               List (_, Unit) -> TUnit 
+                                                               |List (_, _) -> TList (listType, (len-1))
+                                                               |_ -> raise (Failure "Rest only works on pairs and lists.")
+                                                             end
+                                    |_ -> raise (Failure "Can't apply tail to non-lists")
+                                  end
+                       |Concat (a, b) ->  begin
+                                          match (typecheck a env, typecheck b env ) with
+                                            (TList (type1, alen), TList (type2, blen)) -> TList ((common_type type1 type2), (alen + blen))
+                                            |_ -> raise (Failure "Can't concat non-lists.")
+                                          end
+                       |List (head, rest) -> begin
+                                             match typecheck head env with
+                                             TUnit -> raise (Failure "Lists cannot be headed by null.")
+                                             |TList (_, _) -> raise (Failure "Lists cannot be headed by lists.")
+                                             |goodType -> match typecheck rest env with
+                                                          TUnit -> TList (goodType, 1)
+                                                          |TList (type2, len) -> TList ((common_type goodType type2), (len+1))
+                                                          |type2 -> raise (Failure "List was terminated inappropriately.")
+                                             end
+                       |Get (ind, mylist) -> begin
+                                            match(typecheck ind env, typecheck mylist env ) with
+                                              (TInt, TList (type1, _)) -> type1
+                                              |_ -> raise (Failure "Get requires a list to work with.")
+                                            end
+                       |Seq [a] -> typecheck a env
+                       |Seq (a::b) -> typecheck a env;
+                       |App ((Fix lam),var) ->  begin
+                                                match typecheck (Fix lam) env with
+                                                  TFunc(TFunc(from2,to2),TFunc(from1,to1))-> if subtype(typecheck var env)from2 && subtype from2 from1&&subtype to1 to2 
+                                                                                  then to1 else raise (Failure "Input to a lambda is of inappropriate type.")
+                                                  |_ -> raise (Failure "Typecheck failed, at an Application to a fix.")
+                                                end
+                       |App (lam, var) -> begin
+                                          match typecheck lam env  with
+                                            TFunc(from1, to1)->if subtype( typecheck var env) from1 
+                                                            then to1
+                                                            else raise (Failure "Input to a lambda is of inappropriate type.")
+                                            |_ -> raise (Failure "Application is done to a non-lambda.")
+                                          end
+                       |Lam (t, s, b) -> Hashtbl.add env s t;
+                                     TFunc(t,typecheck b env)
+                       |Fix (Lam (t, s, b)) -> typecheck (Lam (t, s, b)) env
+                       |Fix something -> raise (Failure "Typecheck for fix failed.")
+                       |Var st -> Hashtbl.find_exn env st
+                       |_ -> raise (Failure "TODO Not yet implemented")
+                       |As (expr, ty) ->  match (expr,ty) with
+                                            (TL a,TSum (left, right))-> if subtype(typecheck a env)left
+                                                                          then if left = right 
+                                                                                then raise (Failure "Sums must be two different types. TL")
+                                                                                else TSum (left, right)
+                                                                          else error"Typecheck of as failed. TL"
+                                            |(TR b,TSum (left, right))-> if subtype(typecheck b env)right 
+                                                                          then if left = right
+                                                                                then raise (Failure "Sums must be two different types. TR")
+                                                                                else TSum (left, right) 
+                                                                          else raise (Failure "Typecheck of as failed. TR")
+                       |Case (expr, left, right) -> begin
+                                                    match typecheck expr env with
+                                                      TSum (l, r) -> begin 
+                                                                     match (typecheck left env, typecheck right env) with
+                                                                       (TFunc(a,b),TFunc(c,d))->if(subtype l a&&subtype r c)
+                                                                                                  then common_type b d
+                                                                                                  else raise (Failure "Typechecking failure for case lambda.")
+                            _                                        ->error$"Case doesn't have two lambdas."
+                                                                     end
+                                                      _->error $"Case doesn't typecheck to sum."
+                                                    end
+                       |While (guard, body) -> begin
+                                               match typecheck guard env with
+                                                TBool -> typecheck body env; TUnit
+                                                _->error $"Guard must be boolean"
+                                               end
+                       |Lookup name -> Hashtbl.find_exn env st
+                       |Set (ty, name, expr) -> raise (Failure "TODO")(*
+                                                  if(subtype(evalState(typecheck expr)env)ty)
+                                                  then if evalState(free(name,ty))env 
+                                                        then do {put $(Map.insert name ty env);return TDone}
+                                                        else raise  "Attempt to change type of variable." 
+                                                   else raise (Failure "Set has assignent of wrong type."
+                                                  *)
+(*typecheck(Record fields)= do
+  env<-get
+  return(TRecord $ zip(map fst fields)((zipWith evalState(map typecheck(map snd fields))(replicate (length fields)env))))
+typecheck(GetRec str (Record[(k,v)]))=if(k==str)then typecheck v  else error $"Record doesn't possess the specified field."     *)
+
 (*
 (*
-	common_type ::kind->kind->kind
-*)
-common_type ::kind->kind->kind
-common_type (TRecord a)(TRecord b)=TRecord(intersect a b)
-common_type a b=if(subtype a b)then b else if subtype b a then a else TTop
-*)
-(*
-	sub_type ::kind->kind->bool
-*)
-let subtype t1 t2 = match  (t1, t2) with
-                      (TInt, TReal) ->true
-                      |(TBottom, _) -> true
-                      |(_, TTop) -> true
-                      |((TRecord rec1),(TRecord rec2)) -> raise (Failure "Not yet implemented: Should be length(rec2 setminus rec1) = 0") 
-                      (* TODO subtype (a:->b)(c:->d)=subtype c a && subtype b d *)
-                      |(a,b) -> a = b
-(*
-(*
-	lookup_type ::string->TEnv->kind
-	Searches the environment and returns the type of the variable specified.
+  lookup_type ::string->TEnv->kind
+  Searches the environment and returns the type of the variable specified.
 *)
 lookup_type ::string->State TEnv kind
 lookup_type st  = do
-	env<-get
-	case Map.lookup st env of
-		(Just x)->return x
-		_->error $"Variable "++show st++" not found in environment."
+  env<-get
+  case Map.lookup st env of
+    (Just x)->return x
+    _->error $"Variable "++show st++" not found in environment."
 (*
-	purge_env::Env->expr->Env
-	Removes the lambda variables from the environment when it's removed by an application.
+  purge_env::Env->expr->Env
+  Removes the lambda variables from the environment when it's removed by an application.
 *)
 purge_env::expr->State TEnv Bool
 purge_env(Lam t s b)=do
-	env<-get
-	put $Map.delete s env
-	return True
+  env<-get
+  put $Map.delete s env
+  return True
 purge_env (Fix b)= purge_env(b)
 purge_env _=return False --error $"Attempt to purge something not part of an application. We have"++show thing
 (*
-	free::(string,kind)->TEnv->Bool
-	Checks the environment to make sure that a given variable name is not already defined in the environment as having a different type. 
-	I thought of making it crash if you declared a variable twice with the same type, but that would have been both problematic and picky.
+  free::(string,kind)->TEnv->Bool
+  Checks the environment to make sure that a given variable name is not already defined in the environment as having a different type. 
+  I thought of making it crash if you declared a variable twice with the same type, but that would have been both problematic and picky.
 *)
 free::(string,kind)->State TEnv Bool
 free(s,t)=do
-	env<-get
-	case Map.lookup s env of
-		(Just ty)->return (t==ty)
-		_->return True
-		
-	return True
-	(*case env of
-					[]->return True
-					(name,ty):rest->if(name==s&&not(t==ty))then return False else do{put rest;free(s,t)}
-	*)
+  env<-get
+  case Map.lookup s env of
+    (Just ty)->return (t==ty)
+    _->return True
+    
+  return True
+  (*case env of
+          []->return True
+          (name,ty):rest->if(name==s&&not(t==ty))then return False else do{put rest;free(s,t)}
+  *)
 (*
-	simplify_type ::kind -> kind
-	Takes type and either returns TReal or TBool depending on the root.
+  simplify_type ::kind -> kind
+  Takes type and either returns TReal or TBool depending on the root.
 *)
 simplify_type ::kind -> kind
 simplify_type(TInt)=TInt
@@ -226,17 +224,17 @@ simplify_type(TReal)=TReal
 simplify_type(TBool)=TBool
 simplify_type(TList ty _)=ty
 simplify_type(TTuple (t1:t2))=case (simplify_type t1,simplify_type (TTuple t2)) of
-							(TReal,TReal)->TReal
-							(TReal,TNull)->TReal
-							(TBool,TBool)->TBool
-							(TBool,TNull)->TBool
-							_->TNull
+              (TReal,TReal)->TReal
+              (TReal,TNull)->TReal
+              (TBool,TBool)->TBool
+              (TBool,TNull)->TBool
+              _->TNull
 simplify_type(_)=TNull
 
 (*
-	exec :: expr         -> Val
-			thingToCheck -> What it returns
-	Make sure the expr is typesafe and if it evaluate it.
+  exec :: expr         -> Val
+      thingToCheck -> What it returns
+  Make sure the expr is typesafe and if it evaluate it.
 *)
 
 exec ::expr ->Val
@@ -253,7 +251,7 @@ let rec subst str rep body = match body with
                          |(Unit) -> Unit
                          |(Lookup name)-> Lookup name
                          |Var st->if(st=str) then rep else (Var st)
-			                   |Add (arg1, arg2) -> Add ((subst str rep arg1),(subst str rep arg2))
+                         |Add (arg1, arg2) -> Add ((subst str rep arg1),(subst str rep arg2))
                          |Mul (arg1, arg2) -> Mul ((subst str rep arg1),(subst str rep arg2))
                          |Sub (arg1, arg2) -> Sub ((subst str rep arg1),(subst str rep arg2))
                          |And (arg1, arg2) -> And ((subst str rep arg1),(subst str rep arg2))
@@ -278,8 +276,8 @@ let rec subst str rep body = match body with
                          |While (guard, body) -> While ((subst str rep guard),(subst str rep body))
                          |_ ->raise(Failure "Invalid body for substitution.")
 (*
-	eval ::expr  ->Val
-		   input ->result
+  eval ::expr  ->Val
+       input ->result
 *)
 (*
 eval :: expr -> State Env Val
@@ -288,101 +286,101 @@ eval (N a) = return (VN a)
 eval (F a) = return (VF a)
 eval (C a) = return (VC a)
 eval (Tuple a)=do
-	env<-get
-	return(VTuple (zipWith (evalState)(map eval a)(replicate (length a)env )))
+  env<-get
+  return(VTuple (zipWith (evalState)(map eval a)(replicate (length a)env )))
 
 eval (B b)=return(VB b)
 eval (Lam t str body)=return(VLam (Lam t str body))
 eval (List a b)=do
-	env <-get
-	first<-eval a
-	s2nd<-eval b
-	return (VList (first)(s2nd))
+  env <-get
+  first<-eval a
+  s2nd<-eval b
+  return (VList (first)(s2nd))
 eval (Null)=return(VNull)
 eval (Var _) = error "Can't evaluate variables."
 eval (Equal a b)=do
-	first<-eval a
-	s2nd<-eval b
-	return (VB(first==s2nd))
+  first<-eval a
+  s2nd<-eval b
+  return (VB(first==s2nd))
 eval (Record fields)=return(VRecord fields)
 
 --Numerical Functions 
 
 eval (Mul a b) = do
-	env <-get
-	case (evalState(eval a) env,evalState(eval b)env) of
-			(VN x, VN y) -> return(VN(x*y))
-			(VN x, VF y) -> return(VF ((fromIntegral x)*y))
-			(VF x, VN y) -> return(VF(x*(fromIntegral y)))
-			(VF x, VF y) -> return(VF(x*y))
-			something -> error $"Invalid args for multiplication. We have "++ show something++"."
-					
+  env <-get
+  case (evalState(eval a) env,evalState(eval b)env) of
+      (VN x, VN y) -> return(VN(x*y))
+      (VN x, VF y) -> return(VF ((fromIntegral x)*y))
+      (VF x, VN y) -> return(VF(x*(fromIntegral y)))
+      (VF x, VF y) -> return(VF(x*y))
+      something -> error $"Invalid args for multiplication. We have "++ show something++"."
+          
 
 eval (Add a b) = do
-	env <-get
-	case (evalState(eval a) env,evalState(eval b)env) of
-			(VN x, VN y) -> return(VN(x+y))
-			(VN x, VF y) -> return(VF ((fromIntegral x)+y))
-			(VF x, VN y) -> return(VF(x+(fromIntegral y)))
-			(VF x, VF y) -> return(VF(x+y))
-			something -> error $"Invalid args for multiplication. We have "++ show something++"."
-	
+  env <-get
+  case (evalState(eval a) env,evalState(eval b)env) of
+      (VN x, VN y) -> return(VN(x+y))
+      (VN x, VF y) -> return(VF ((fromIntegral x)+y))
+      (VF x, VN y) -> return(VF(x+(fromIntegral y)))
+      (VF x, VF y) -> return(VF(x+y))
+      something -> error $"Invalid args for multiplication. We have "++ show something++"."
+  
 eval (Sub a b) = do
-	env <-get
-	case (evalState(eval a) env,evalState(eval b)env) of
-			(VN x, VN y) -> return(VN(x-y))
-			(VN x, VF y) -> return(VF ((fromIntegral x)-y))
-			(VF x, VN y) -> return(VF(x-(fromIntegral y)))
-			(VF x, VF y) -> return(VF(x-y))
-			something -> error $"Invalid args for multiplication. We have "++ show something++"."	
+  env <-get
+  case (evalState(eval a) env,evalState(eval b)env) of
+      (VN x, VN y) -> return(VN(x-y))
+      (VN x, VF y) -> return(VF ((fromIntegral x)-y))
+      (VF x, VN y) -> return(VF(x-(fromIntegral y)))
+      (VF x, VF y) -> return(VF(x-y))
+      something -> error $"Invalid args for multiplication. We have "++ show something++"." 
 
 eval (App lam var) = do
-	env<-get
-	case evalState(eval lam)env of
-					(VLam(Lam t str body))-> eval ( subst str var body)
-					something -> error $"Invalid args for application. We have "++ show something++" as our lambda."
+  env<-get
+  case evalState(eval lam)env of
+          (VLam(Lam t str body))-> eval ( subst str var body)
+          something -> error $"Invalid args for application. We have "++ show something++" as our lambda."
 
---Boolean Functions					
+--Boolean Functions         
 eval(If condition thenCase elseCase)=do
-	env<-get
-	case evalState(eval condition)env of
-					(VB True)->eval(thenCase) 
-					(VB False)->eval(elseCase)
-					something-> error $"Invalid condition for if. We have "++show something++"."
+  env<-get
+  case evalState(eval condition)env of
+          (VB True)->eval(thenCase) 
+          (VB False)->eval(elseCase)
+          something-> error $"Invalid condition for if. We have "++show something++"."
 
 eval(And a b) = do
-	env <-get
-	case (evalState(eval a) env,evalState(eval b)env) of
-			(VB x, VB y) -> return(VB(x&&y))
-			something -> error $"Invalid args for multiplication. We have "++ show something++"."	
-						
+  env <-get
+  case (evalState(eval a) env,evalState(eval b)env) of
+      (VB x, VB y) -> return(VB(x&&y))
+      something -> error $"Invalid args for multiplication. We have "++ show something++"." 
+            
 eval(Or a b)=do
-	env <-get
-	case (evalState(eval a) env,evalState(eval b)env) of
-			(VB x, VB y) -> return(VB(x||y))
-			something -> error $"Invalid args for multiplication. We have "++ show something++"."
-						
+  env <-get
+  case (evalState(eval a) env,evalState(eval b)env) of
+      (VB x, VB y) -> return(VB(x||y))
+      something -> error $"Invalid args for multiplication. We have "++ show something++"."
+            
 
 eval(Not a)=do
-	env <-get
-	case(evalState(eval a) env) of
-					(VB x)->return(VB(not x))
-					(n)->error $"Attempt to not" ++show a 
+  env <-get
+  case(evalState(eval a) env) of
+          (VB x)->return(VB(not x))
+          (n)->error $"Attempt to not" ++show a 
 
---List and pair functions		
+--List and pair functions   
 eval(Concat a b)=do
-	env <-get
-	case (a) of
-						(Null) -> eval b
-						(List head rest)->eval(List head (make_expr(evalState(eval(Concat rest b))env)))
-						_ ->error $ "Concat failed. We have "++show (a,b)++"."
+  env <-get
+  case (a) of
+            (Null) -> eval b
+            (List head rest)->eval(List head (make_expr(evalState(eval(Concat rest b))env)))
+            _ ->error $ "Concat failed. We have "++show (a,b)++"."
 eval(Get index list)=do
-	env <-get
-	case evalState(eval index)env of --Get the indexth member of list.
-						(VN num)->if(num<=0) then error "Index out of bounds."
-									else if num==1 
-										then eval(Head list) 
-										else eval(Get (N (num-1)) (make_expr(evalState(eval (Rest(list)))env)))
+  env <-get
+  case evalState(eval index)env of --Get the indexth member of list.
+            (VN num)->if(num<=0) then error "Index out of bounds."
+                  else if num==1 
+                    then eval(Head list) 
+                    else eval(Get (N (num-1)) (make_expr(evalState(eval (Rest(list)))env)))
 eval(Head (List a _))=eval a--Get the first element in list.
 eval(Head (something))=eval something--I think this executing is a bug.
 eval(Rest (List _ b))= eval b
@@ -393,66 +391,66 @@ eval(LetN ((str,be):more) body)=eval (LetN more (subst str be body))
 eval(Fix body) =eval(App body (Fix body))--subst name (Fix name body) body)
 eval(As expr _)=eval expr 
 eval(TL a)=do
-	env <-get
-	return(VL(evalState(eval a)env))
+  env <-get
+  return(VL(evalState(eval a)env))
 eval(TR a)=do
-	env <-get
-	return(VR(evalState(eval a)env))
+  env <-get
+  return(VR(evalState(eval a)env))
 eval(Case expr left right)=do
-	env <-get
-	case evalState(eval expr)env of
-							(VL a)->eval(App left (make_expr a))
-							(VR b)->eval(App right(make_expr b))
-							(thing)->error $"Case returned "++show thing++"."
+  env <-get
+  case evalState(eval expr)env of
+              (VL a)->eval(App left (make_expr a))
+              (VR b)->eval(App right(make_expr b))
+              (thing)->error $"Case returned "++show thing++"."
 
 eval(Seq [a])=  eval a
 eval(Seq (a:b))=do
-	env<-get
-	put $execState(eval a)env
-	eval (Seq b)
+  env<-get
+  put $execState(eval a)env
+  eval (Seq b)
 eval(Set _ name a)=do
-	env<-get
-	put $execState(set_helper(name,evalState(eval a)env))env
-	return VDone
+  env<-get
+  put $execState(set_helper(name,evalState(eval a)env))env
+  return VDone
 eval(Lookup str)=do
-	env<-get
-	return $evalState(lookup_state str)env
+  env<-get
+  return $evalState(lookup_state str)env
 eval(While guard body)=do
-	env<-get
-	case evalState(eval guard)env of
-								(VB True )->do
-											put $execState(eval body)env
-											eval(While guard body)
-								(VB False)->return(VDone)
-								_-> error$"Do while failure in false."
+  env<-get
+  case evalState(eval guard)env of
+                (VB True )->do
+                      put $execState(eval body)env
+                      eval(While guard body)
+                (VB False)->return(VDone)
+                _-> error$"Do while failure in false."
 eval(Done) =return(VDone)
 eval something = error $"No pattern to evaluate "++show something++"."
 
 (*
-	set_helper::(string,Val)->State Env Bool
-	Redefines the value of a variable in the environment or gives it one if it was previously undefined.
-*)	
+  set_helper::(string,Val)->State Env Bool
+  Redefines the value of a variable in the environment or gives it one if it was previously undefined.
+*)  
 set_helper::(string,Val)->State Env ()
 set_helper (name,val) = do
-	env<-get
-	put$Map.insert name val env
+  env<-get
+  put$Map.insert name val env
 (*
-	lookup_state ::string->State Env Val
-	Given the name of a variable either returns its value in the environment or crashes.
-*)	
+  lookup_state ::string->State Env Val
+  Given the name of a variable either returns its value in the environment or crashes.
+*)  
 lookup_state ::string->State Env Val
 lookup_state st  = do
-	env<-get
-	case Map.lookup st env of
-		(Just x)->return x
-		_->error $"Variable "++show st++" not found in environment."
+  env<-get
+  case Map.lookup st env of
+    (Just x)->return x
+    _->error $"Variable "++show st++" not found in environment."
 
 (*
-	make_expr :: Val   ->expr
-				result->input
-	Inverts eval.
+  make_expr :: Val   ->expr
+        result->input
+  Inverts eval.
 
-*)		
+*)    
 make_expr :: Val -> expr 
 make_expr(VB a)=(B a)
 make_expr(VN a)=(N a)
@@ -631,49 +629,49 @@ typ1111=App(Lam (TInt:->TInt) "x" (App(Var "x")(N 3)))(Lam TInt "y" ((Var "y")))
 
 (* tests paired with their expected answers *)
 numTests = [(n1,VN 20),(n2,VN 14),(n3,VN 1),(n4,VN 123) ,(s4A,VN 25),
-			(s5A,VN 24),(maybe1,(VN 4)),(maybe2,(VB True)), --(s6A,s6Evaled),
-			(maybe3,maybe3Ans),(maybe4,VN 5),(fl1,VF (3.4*3)),(fl2,VF 9.6),(fl3,VF 10.88)
-			,(fl4,VF 6.4),(fl5,VF 6.2),(fl6,VF (3.4+3.2)),(fl7,VF (3.4-3)),(fl8,VF (3-3.2)),(fl9,VF (3.4-3.2))]
+      (s5A,VN 24),(maybe1,(VN 4)),(maybe2,(VB True)), --(s6A,s6Evaled),
+      (maybe3,maybe3Ans),(maybe4,VN 5),(fl1,VF (3.4*3)),(fl2,VF 9.6),(fl3,VF 10.88)
+      ,(fl4,VF 6.4),(fl5,VF 6.2),(fl6,VF (3.4+3.2)),(fl7,VF (3.4-3)),(fl8,VF (3-3.2)),(fl9,VF (3.4-3.2))]
 
 pairTests=[(p3,VB True),(p4,VB False)]--(p1,p1A),(p2,p2A),
 
 boolTests=[(b1,VB True),(b2,VB False),(b3,VB True),(b4,VB False)
-			,(b5,VB True),(b6,VB False),(b7,VB False),(b8,VB True)
-			,(b9,VB False),(b10,VB True),(b11,VB True),(b12,VB False)
-			,(t5,VB False)]
-			
+      ,(b5,VB True),(b6,VB False),(b7,VB False),(b8,VB True)
+      ,(b9,VB False),(b10,VB True),(b11,VB True),(b12,VB False)
+      ,(t5,VB False)]
+      
 execTests=[(n1,VN 20),(n2,VN 14),(n3,VN 1),(n4,VN 123) ,(s4A,VN 25),
-			(s5A,VN 24) -- ,(s6A,s6Evaled)
-			,(f1,f1A),(f2,VN 5),(f5,f5A)
-			,(f6,VN 25),(t4,VB True),(t5,VB False),(t6,(VList (VN 5)(VList (VN 1)(VNull))))
-			,(t8,VList (VN 5)(VList (VN 1)(VNull)))
-			,(t9, VLam (Lam (TList TReal 3) "x" (Equal (Var "x")(List (N 1) (List (N 3)(List (N 2)(Null)))))))
-			,(t10,VN 3),(t11,VList (VN 1)(VNull))--,(t12,VList (VN 25)(VList (VN 1)(VNull))),(t13,VList (VN 10)(VList (VN 2)(VNull)))
-			--,(t14,VList (VN 0)(VList (VN 0)(VNull))),(t15,VList (VB True)(VList (VB False)(VNull)))
-			--,(t16,VList (VB True)(VList (VB False)(VNull))),(t17,VList (VB False)(VList (VB True)(VNull))),(t18,VList (VB True)(VList (VB True)(VNull)))
-			--,(p7,VTuple[VN 8,VN 10]),(p8,VTuple[VN 2,VN 2]) --,(s7A,VTuple[VB True,VB False])
-			,(sum1,VL(VN 5)),(sum2,VR(VB True)),(case1,VN 5),(case2,VN 4),(rec1,VRecord[("age",N 18),("shoe-size",N 14)])
-			,(rec2,VN 14),(rec3,VN 18),(App fibonacci (N 4),VN 3),(sum4,VL(VN 5)),(sum5,VR(VB False)),(case3,VN 5),(case4,VN 3)
-			,(s14A,VN 1),(Done,VDone)]--,(s15A,VN 6)] --(s8A,s8Evaled),(p9,VTuple[VB False,VB True]),
-			
+      (s5A,VN 24) -- ,(s6A,s6Evaled)
+      ,(f1,f1A),(f2,VN 5),(f5,f5A)
+      ,(f6,VN 25),(t4,VB True),(t5,VB False),(t6,(VList (VN 5)(VList (VN 1)(VNull))))
+      ,(t8,VList (VN 5)(VList (VN 1)(VNull)))
+      ,(t9, VLam (Lam (TList TReal 3) "x" (Equal (Var "x")(List (N 1) (List (N 3)(List (N 2)(Null)))))))
+      ,(t10,VN 3),(t11,VList (VN 1)(VNull))--,(t12,VList (VN 25)(VList (VN 1)(VNull))),(t13,VList (VN 10)(VList (VN 2)(VNull)))
+      --,(t14,VList (VN 0)(VList (VN 0)(VNull))),(t15,VList (VB True)(VList (VB False)(VNull)))
+      --,(t16,VList (VB True)(VList (VB False)(VNull))),(t17,VList (VB False)(VList (VB True)(VNull))),(t18,VList (VB True)(VList (VB True)(VNull)))
+      --,(p7,VTuple[VN 8,VN 10]),(p8,VTuple[VN 2,VN 2]) --,(s7A,VTuple[VB True,VB False])
+      ,(sum1,VL(VN 5)),(sum2,VR(VB True)),(case1,VN 5),(case2,VN 4),(rec1,VRecord[("age",N 18),("shoe-size",N 14)])
+      ,(rec2,VN 14),(rec3,VN 18),(App fibonacci (N 4),VN 3),(sum4,VL(VN 5)),(sum5,VR(VB False)),(case3,VN 5),(case4,VN 3)
+      ,(s14A,VN 1),(Done,VDone)]--,(s15A,VN 6)] --(s8A,s8Evaled),(p9,VTuple[VB False,VB True]),
+      
 funcTests=[(f1,f1A),(f2,VN 5),(f3,f3A),(f5,f5A)
-			,(f6,VN 25)]
-		
+      ,(f6,VN 25)]
+    
 subTests=[(s1Q,s1A),(s2Q,s2A),(s3Q,s3A),(s4Q,s4A),(s5Q,s5A), --(s6Q,s6A),(s7Q,s7A),(s8Q,s8A),
-		   (s9,s9A),(s10,s10A),(s11,s11A),(s12,s12A),(s13,s13A),(s14,s14A),(s15,s15A)]
+       (s9,s9A),(s10,s10A),(s11,s11A),(s12,s12A),(s13,s13A),(s14,s14A),(s15,s15A)]
 
 typeTests=[ (n1,TInt),(n2,TInt),(n3,TInt),(n4,TInt),(b1,TBool),
-			(b2,TBool),(b3,TBool),(b4,TBool),(b5,TBool),(b6,TBool),
-			(b7,TBool),(b8,TBool),(b9,TBool),(b10,TBool),(b11,TBool),
-			(b12,TBool),(f1,TInt :-> TInt),(f2,TInt),(t1,TBool :-> TInt),
-			(t2,TInt),(t3,TInt :-> (TBool :-> TInt)),(t4,TBool),(Null,TNull),
-			(t6,TList TInt 2),(t10,TInt),(t11,TList TInt 1),(sum1,TSum TInt TBool), --(s7A,TTuple [TBool,TBool]),
-			(sum2,TSum TInt TBool),(case1,TReal),(case2,TReal),(factorial,(TInt :->TInt):->(TInt:->TInt)),
-			(Tuple [N 3,N 2, B True],TTuple[TInt,TInt,TBool]),(run,TInt),
-			(while1,TDone),(assign1,TInt),(t12,TList TReal 3),(rec1,rec1T),(rec4,rec4T)]
-			
+      (b2,TBool),(b3,TBool),(b4,TBool),(b5,TBool),(b6,TBool),
+      (b7,TBool),(b8,TBool),(b9,TBool),(b10,TBool),(b11,TBool),
+      (b12,TBool),(f1,TInt :-> TInt),(f2,TInt),(t1,TBool :-> TInt),
+      (t2,TInt),(t3,TInt :-> (TBool :-> TInt)),(t4,TBool),(Null,TNull),
+      (t6,TList TInt 2),(t10,TInt),(t11,TList TInt 1),(sum1,TSum TInt TBool), --(s7A,TTuple [TBool,TBool]),
+      (sum2,TSum TInt TBool),(case1,TReal),(case2,TReal),(factorial,(TInt :->TInt):->(TInt:->TInt)),
+      (Tuple [N 3,N 2, B True],TTuple[TInt,TInt,TBool]),(run,TInt),
+      (while1,TDone),(assign1,TInt),(t12,TList TReal 3),(rec1,rec1T),(rec4,rec4T)]
+      
 subtypeTests=[(TInt,TReal,True),(TReal,TReal,True),(TReal,TInt,False),(rec4T,rec1T,True),(rec1T,rec4T,False)
-				,(TTop,TBottom,False),(TBottom,TTop,True),(rec1T,rec4T,False)]
+        ,(TTop,TBottom,False),(TBottom,TTop,True),(rec1T,rec4T,False)]
 
 (* are tests paired up with their actual results? *)
 testResults = map (\(t,v)-> evalState(eval t)Map.empty==v) numTests
@@ -690,38 +688,38 @@ subtypeTestResults = map (\(t,r,v)-> subtype t r==v) subtypeTests
 factorial = Fix (Lam (TInt :-> TInt)"fac"(Lam TInt "x" ((If (Equal (Var "x")(N 1))(N 1)(Mul (Var "x")(App((Var "fac")) (Sub (Var "x") (N 1))))))) )
 run=App factorial (N 4)
 fibonacci=Lam (TInt) "limit" 
-	(Seq[Set TInt "x0" (N 0),
-		Set TInt "x1" (N 1),
-		Set TInt "count" (N 0),
-		While(Not(Equal (Lookup "count")(Var "limit")))
-		(Seq [
-			Set TInt "x0"(Add(Lookup "x0")(Lookup "x1")),
-			Set TInt "x1"(Sub(Lookup "x0")(Lookup "x1")),
-			Set TInt "count" (Add(Lookup "count")(N 1))
-			]),
-		Lookup "x0"
-	])
-	
+  (Seq[Set TInt "x0" (N 0),
+    Set TInt "x1" (N 1),
+    Set TInt "count" (N 0),
+    While(Not(Equal (Lookup "count")(Var "limit")))
+    (Seq [
+      Set TInt "x0"(Add(Lookup "x0")(Lookup "x1")),
+      Set TInt "x1"(Sub(Lookup "x0")(Lookup "x1")),
+      Set TInt "count" (Add(Lookup "count")(N 1))
+      ]),
+    Lookup "x0"
+  ])
+  
 maybeWhile=Seq[Set TInt "cnt" (N 0) ,
-		While(Not(Equal (Lookup "cnt")(N 2)))
-		(Seq [
-			If(Equal (Lookup "cnt")(N 1)) (Lookup "x")(N 0),
-			If(Equal (Lookup "cnt")(N 0)) (Set TInt "x" (N 0))(Done),
-			Set TInt "cnt" (Add(Lookup "cnt")(N 1))
-			])	
-			]
+    While(Not(Equal (Lookup "cnt")(N 2)))
+    (Seq [
+      If(Equal (Lookup "cnt")(N 1)) (Lookup "x")(N 0),
+      If(Equal (Lookup "cnt")(N 0)) (Set TInt "x" (N 0))(Done),
+      Set TInt "cnt" (Add(Lookup "cnt")(N 1))
+      ])  
+      ]
 (* were all tests okay? *)
 okay = (and testResults)&&(and boolTestResults)  &&  (and subTestResults)  &&  (and funcTestResults)  && (and typeTestResults)  &&(and pairTestResults) &&(and execTestResults)&&(and subtypeTestResults)
 
 main = do
-	putStrLn("testResults passed=" ++show (and testResults))
-	putStrLn("boolTestResults passed=" ++show (and boolTestResults))
-	putStrLn("subTestResults passed=" ++show (and subTestResults))
-	putStrLn("funcTestResults passed=" ++show (and funcTestResults))
-	putStrLn("typeTestResults passed=" ++show (and typeTestResults))
-	putStrLn("pairTestResults passed=" ++show (and pairTestResults))
-	putStrLn("execTestResults passed=" ++show (and execTestResults))
-	putStrLn("subtypeTestResults passed=" ++show (and subtypeTestResults))
-	putStrLn("all passed=" ++show okay)
+  putStrLn("testResults passed=" ++show (and testResults))
+  putStrLn("boolTestResults passed=" ++show (and boolTestResults))
+  putStrLn("subTestResults passed=" ++show (and subTestResults))
+  putStrLn("funcTestResults passed=" ++show (and funcTestResults))
+  putStrLn("typeTestResults passed=" ++show (and typeTestResults))
+  putStrLn("pairTestResults passed=" ++show (and pairTestResults))
+  putStrLn("execTestResults passed=" ++show (and execTestResults))
+  putStrLn("subtypeTestResults passed=" ++show (and subtypeTestResults))
+  putStrLn("all passed=" ++show okay)
 *)
 *)
