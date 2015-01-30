@@ -12,8 +12,7 @@ type expr = N of int | F of float| Add of (expr * expr) | Mul of (expr * expr) |
     |And of (expr * expr) | Or of (expr * expr) |Not of expr |If of (expr * expr * expr) |Equal of (expr * expr) | B of bool
     |Lam of (kind * string * expr) | App of (expr * expr) | Var of string |Tuple of expr list
     |List of (expr * expr) 
-    |Unit | Done (* Remove and replace with Unit *)
-    |Concat of (expr * expr) | Get of (expr * expr) | Head of expr | Tail of expr
+    |Unit |Concat of (expr * expr) | Get of (expr * expr) | Head of expr | Tail of expr
     |Record of (string * expr) list | GetRec of (string * expr)
     |Fix of expr | LetN of ((string * expr) list * expr)  
     |TL of expr| TR of expr| Case of (expr * expr * expr) |As of (expr * kind) 
@@ -26,7 +25,7 @@ and kind = TInt | TReal | TBool | TChar | TFunc of (kind * kind) | TTuple of kin
            TyR of kind | TList of (kind * int) | TRecord of (string * kind) list | TUnit | TSum of (kind * kind) | 
            TTop | TBottom | TStr
 
-type value = VB of bool | VC of char | VTuple of value list | VList of (value * value) | VUnit | VL of value | VR of value | VDone|
+type value = VB of bool | VC of char | VTuple of value list | VList of (value * value) | VUnit | VL of value | VR of value |
              VN of int |VF of float| VLam of expr | VRecord of (string * expr) list | VTop | VBottom
 
 type env_type = (string, value) Hashtbl.t;;
@@ -52,18 +51,19 @@ let common_type t1 t2 = match (t1, t2) with
 
 let echo_first f s = f;;
 (*
-  typecheck ::expr -> env_type -> kind
+  typecheck ::expr -> type_map -> kind
         suspicious expression -> lookup table -> type it returns
   Makes sure an expression uses types correctly and either returns 
   a value of a single type or returns an error.
 *)      
-(*typecheck ::expr->State TEnv kind --[(string,kind)]->([(string,kind)],kind)*)
 let rec typecheck expr env = match expr with
   C _ -> TChar
   |N _ -> TInt
   |F _ -> TReal
   |B _ -> TBool
   |Unit -> TUnit
+  |Top -> TTop
+  |Bottom -> TBottom
   |Equal (_,_) -> TBool
   |Add (a, b) -> typecheck (Sub (a,b)) env
   |Mul (a, b) -> typecheck (Sub (a,b)) env
@@ -133,6 +133,9 @@ let rec typecheck expr env = match expr with
   |Fix (Lam (t, s, b)) -> typecheck (Lam (t, s, b)) env
   |Fix something -> raise (Failure "Typecheck for fix failed.")
   |Var st -> Hashtbl.find_exn env st
+  |LetN (things,body) -> raise (Failure "TODO")
+  |TL _ -> raise (Failure "TODO")
+  |TR _ -> raise (Failure "TODO")
   |As (expr, ty) -> typecheck_as (expr, ty) env  
   |Case (expr, left, right) -> typecheck_case (expr,left,right) env
   |While (guard, body) -> if typecheck guard env = TBool
@@ -149,7 +152,7 @@ let rec typecheck expr env = match expr with
   |Record fields -> TRecord (List.zip_exn(List.map fields fst)(List.map (List.map fields snd)(fun a -> typecheck a env)))
   |GetRec (str, (Record[(k,v)])) -> if k = str then typecheck v env else raise (Failure "Record doesn't possess the specified field." )
   |GetRec (str, (Record((k,v)::fields))) -> if k = str then typecheck v env  else typecheck (GetRec (str,Record fields)) env
-  |_ -> raise (Failure "TODO Not yet implemented")
+  |_ -> invalid_arg "Not a valid expression."
 
 and typecheck_case (expr, left, right) env = begin
   match typecheck expr env with
@@ -177,81 +180,20 @@ and typecheck_as (expr, ty) env = match (expr,ty) with (* TODO DEBUG This code i
   |_ -> invalid_arg "typecheck_as"
 ;;
 
-(*
-(*
-  lookup_type ::string->TEnv->kind
-  Searches the environment and returns the type of the variable specified.
-*)
-lookup_type ::string->State TEnv kind
-lookup_type st  = do
-  env<-get
-  case Map.lookup st env of
-    (Just x)->return x
-    _->error $"Variable "++show st++" not found in environment."
-(*
-  purge_env::Env->expr->Env
-  Removes the lambda variables from the environment when it's removed by an application.
-*)
-purge_env::expr->State TEnv Bool
-purge_env(Lam t s b)=do
-  env<-get
-  put $Map.delete s env
-  return True
-purge_env (Fix b)= purge_env(b)
-purge_env _=return False --error $"Attempt to purge something not part of an application. We have"++show thing
-(*
-  free::(string,kind)->TEnv->Bool
-  Checks the environment to make sure that a given variable name is not already defined in the environment as having a different type. 
-  I thought of making it crash if you declared a variable twice with the same type, but that would have been both problematic and picky.
-*)
-free::(string,kind)->State TEnv Bool
-free(s,t)=do
-  env<-get
-  case Map.lookup s env of
-    (Just ty)->return (t==ty)
-    _->return True
-    
-  return True
-  (*case env of
-          []->return True
-          (name,ty):rest->if(name==s&&not(t==ty))then return False else do{put rest;free(s,t)}
-  *)
-(*
-  simplify_type ::kind -> kind
-  Takes type and either returns TReal or TBool depending on the root.
-*)
-simplify_type ::kind -> kind
-simplify_type(TInt)=TInt
-simplify_type(TReal)=TReal
-simplify_type(TBool)=TBool
-simplify_type(TList ty _)=ty
-simplify_type(TTuple (t1:t2))=case (simplify_type t1,simplify_type (TTuple t2)) of
-              (TReal,TReal)->TReal
-              (TReal,TNull)->TReal
-              (TBool,TBool)->TBool
-              (TBool,TNull)->TBool
-              _->TNull
-simplify_type(_)=TNull
 
-(*
-  exec :: expr         -> Val
-      thingToCheck -> What it returns
-  Make sure the expr is typesafe and if it evaluate it.
-*)
-
-exec ::expr ->Val
-exec(a)= evalState(typecheck a)Map.empty `seq` (evalState(eval a )Map.empty)
-*)
 (*
 subst :: string -> expr  ->      expr
            var     replacement   thingToSubThrough Done 
 *)
 let rec subst str rep body = match body with
-  (N a) -> (N a)
-  |(F a) -> (F a)
-  |(B a) -> (B a)
-  |(Unit) -> Unit
-  |(Lookup name)-> Lookup name
+  N a -> N a
+  |F a -> F a
+  |B a -> B a
+  |C a -> C a
+  |Unit -> Unit
+  |Top -> Top
+  |Bottom -> Bottom
+  |Lookup name-> Lookup name
   |Var st->if(st=str) then rep else (Var st)
   |Add (arg1, arg2) -> Add ((subst str rep arg1),(subst str rep arg2))
   |Mul (arg1, arg2) -> Mul ((subst str rep arg1),(subst str rep arg2))
@@ -263,204 +205,174 @@ let rec subst str rep body = match body with
   |Equal (arg1, arg2) -> Equal((subst str rep arg1),(subst str rep arg2))
   |Lam (t, st, b) -> if(st=str) then (Lam (t, st, b)) else Lam (t, st, (subst str rep b))
   |App (arg1, arg2) -> App ((subst str rep arg1),(subst str rep arg2))
-  (* TODO |Tuple a -> Tuple(List.map(subst str rep) a)  *)
+  |Tuple a -> Tuple(List.map a (subst str rep))
   |Get (index, mylist) -> Get ((subst str rep index),(subst str rep mylist))
   |Tail a -> Tail(subst str rep a)
   |Head a -> Head(subst str rep a)
   |List (head, rest) -> List ((subst str rep head),(subst str rep rest))
+  |Concat (a, b) -> List ((subst str rep a),(subst str rep b))
   |Fix expr-> Fix (subst str rep expr)
   |As (expr, ty)->As ((subst str rep expr),ty)
   |TL a->TL ( subst str rep a)
   |TR b->TR (subst str rep b)
-  (* TODO |LetN things body-> LetN (zip(map fst things)(map(subst str rep)(map snd things))) (subst str rep body)  *)
-  (* TODO |Seq a -> Seq (List.map (subst str rep) a) *)
+  |Case (expr, left, right) -> Case (subst str rep expr,
+                                     subst str rep left,
+                                     subst str rep right)
+  |Record fields -> Record (List.zip_exn(List.map fields fst)(List.map (List.map fields snd)(subst str rep)))
+  |GetRec (str, record) -> GetRec (str, subst str rep record)
+  |LetN (things, body)-> LetN ((List.zip_exn(List.map things fst)(List.map(List.map things snd)(subst str rep))), (subst str rep body) )
+  |Seq a -> Seq (List.map a (subst str rep))
   |Set (ty, name, a) ->Set (ty, name, (subst str rep a))
   |While (guard, body) -> While ((subst str rep guard),(subst str rep body))
-  |_ ->raise(Failure "Invalid body for substitution.")
-(*
-  eval ::expr  ->Val
-       input ->result
-*)
-(*
-eval :: expr -> State Env Val
-
-eval (N a) = return (VN a)
-eval (F a) = return (VF a)
-eval (C a) = return (VC a)
-eval (Tuple a)=do
-  env<-get
-  return(VTuple (zipWith (evalState)(map eval a)(replicate (length a)env )))
-
-eval (B b)=return(VB b)
-eval (Lam t str body)=return(VLam (Lam t str body))
-eval (List a b)=do
-  env <-get
-  first<-eval a
-  s2nd<-eval b
-  return (VList (first)(s2nd))
-eval (Null)=return(VNull)
-eval (Var _) = error "Can't evaluate variables."
-eval (Equal a b)=do
-  first<-eval a
-  s2nd<-eval b
-  return (VB(first==s2nd))
-eval (Record fields)=return(VRecord fields)
-
---Numerical Functions 
-
-eval (Mul a b) = do
-  env <-get
-  case (evalState(eval a) env,evalState(eval b)env) of
-      (VN x, VN y) -> return(VN(x*y))
-      (VN x, VF y) -> return(VF ((fromIntegral x)*y))
-      (VF x, VN y) -> return(VF(x*(fromIntegral y)))
-      (VF x, VF y) -> return(VF(x*y))
-      something -> error $"Invalid args for multiplication. We have "++ show something++"."
-          
-
-eval (Add a b) = do
-  env <-get
-  case (evalState(eval a) env,evalState(eval b)env) of
-      (VN x, VN y) -> return(VN(x+y))
-      (VN x, VF y) -> return(VF ((fromIntegral x)+y))
-      (VF x, VN y) -> return(VF(x+(fromIntegral y)))
-      (VF x, VF y) -> return(VF(x+y))
-      something -> error $"Invalid args for multiplication. We have "++ show something++"."
-  
-eval (Sub a b) = do
-  env <-get
-  case (evalState(eval a) env,evalState(eval b)env) of
-      (VN x, VN y) -> return(VN(x-y))
-      (VN x, VF y) -> return(VF ((fromIntegral x)-y))
-      (VF x, VN y) -> return(VF(x-(fromIntegral y)))
-      (VF x, VF y) -> return(VF(x-y))
-      something -> error $"Invalid args for multiplication. We have "++ show something++"." 
-
-eval (App lam var) = do
-  env<-get
-  case evalState(eval lam)env of
-          (VLam(Lam t str body))-> eval ( subst str var body)
-          something -> error $"Invalid args for application. We have "++ show something++" as our lambda."
-
---Boolean Functions         
-eval(If condition thenCase elseCase)=do
-  env<-get
-  case evalState(eval condition)env of
-          (VB True)->eval(thenCase) 
-          (VB False)->eval(elseCase)
-          something-> error $"Invalid condition for if. We have "++show something++"."
-
-eval(And a b) = do
-  env <-get
-  case (evalState(eval a) env,evalState(eval b)env) of
-      (VB x, VB y) -> return(VB(x&&y))
-      something -> error $"Invalid args for multiplication. We have "++ show something++"." 
-            
-eval(Or a b)=do
-  env <-get
-  case (evalState(eval a) env,evalState(eval b)env) of
-      (VB x, VB y) -> return(VB(x||y))
-      something -> error $"Invalid args for multiplication. We have "++ show something++"."
-            
-
-eval(Not a)=do
-  env <-get
-  case(evalState(eval a) env) of
-          (VB x)->return(VB(not x))
-          (n)->error $"Attempt to not" ++show a 
-
---List and pair functions   
-eval(Concat a b)=do
-  env <-get
-  case (a) of
-            (Null) -> eval b
-            (List head rest)->eval(List head (make_expr(evalState(eval(Concat rest b))env)))
-            _ ->error $ "Concat failed. We have "++show (a,b)++"."
-eval(Get index list)=do
-  env <-get
-  case evalState(eval index)env of --Get the indexth member of list.
-            (VN num)->if(num<=0) then error "Index out of bounds."
-                  else if num==1 
-                    then eval(Head list) 
-                    else eval(Get (N (num-1)) (make_expr(evalState(eval (Rest(list)))env)))
-eval(Head (List a _))=eval a--Get the first element in list.
-eval(Head (something))=eval something--I think this executing is a bug.
-eval(Rest (List _ b))= eval b
-eval(GetRec str (Record [(k,v)]))=if(str==k)then (eval v ) else error "Key not found."
-eval(GetRec str (Record ((k,v):record)))=if(str==k)then eval v  else eval(GetRec str (Record record))
-eval(LetN [(str,be)] body)=eval (subst str be body) 
-eval(LetN ((str,be):more) body)=eval (LetN more (subst str be body)) 
-eval(Fix body) =eval(App body (Fix body))--subst name (Fix name body) body)
-eval(As expr _)=eval expr 
-eval(TL a)=do
-  env <-get
-  return(VL(evalState(eval a)env))
-eval(TR a)=do
-  env <-get
-  return(VR(evalState(eval a)env))
-eval(Case expr left right)=do
-  env <-get
-  case evalState(eval expr)env of
-              (VL a)->eval(App left (make_expr a))
-              (VR b)->eval(App right(make_expr b))
-              (thing)->error $"Case returned "++show thing++"."
-
-eval(Seq [a])=  eval a
-eval(Seq (a:b))=do
-  env<-get
-  put $execState(eval a)env
-  eval (Seq b)
-eval(Set _ name a)=do
-  env<-get
-  put $execState(set_helper(name,evalState(eval a)env))env
-  return VDone
-eval(Lookup str)=do
-  env<-get
-  return $evalState(lookup_state str)env
-eval(While guard body)=do
-  env<-get
-  case evalState(eval guard)env of
-                (VB True )->do
-                      put $execState(eval body)env
-                      eval(While guard body)
-                (VB False)->return(VDone)
-                _-> error$"Do while failure in false."
-eval(Done) =return(VDone)
-eval something = error $"No pattern to evaluate "++show something++"."
-
-(*
-  set_helper::(string,Val)->State Env Bool
-  Redefines the value of a variable in the environment or gives it one if it was previously undefined.
-*)  
-set_helper::(string,Val)->State Env ()
-set_helper (name,val) = do
-  env<-get
-  put$Map.insert name val env
-(*
-  lookup_state ::string->State Env Val
-  Given the name of a variable either returns its value in the environment or crashes.
-*)  
-lookup_state ::string->State Env Val
-lookup_state st  = do
-  env<-get
-  case Map.lookup st env of
-    (Just x)->return x
-    _->error $"Variable "++show st++" not found in environment."
 
 (*
   make_expr :: Val   ->expr
         result->input
   Inverts eval.
-
 *)    
-make_expr :: Val -> expr 
-make_expr(VB a)=(B a)
-make_expr(VN a)=(N a)
-make_expr(VTuple a)= Tuple (map make_expr a) 
-make_expr(VLam (Lam t str body))=Lam t str body
-make_expr(VList a b)=List (make_expr a)(make_expr b)
-make_expr(VRecord stuff)=Record stuff
-make_expr(VNull)=Null
+let rec make_expr v = match v with
+  VB a -> B a
+  |VN a -> N a
+  |VTuple a -> Tuple (List.map a make_expr)
+  |VLam lambda -> lambda
+  |VList (a, b) -> List ((make_expr a),(make_expr b))
+  |VRecord stuff -> Record stuff
+  |VUnit -> Unit
+  |VC c -> C c
+  |VF f -> F f
+  |VL l -> TL (make_expr l)
+  |VR r -> TR (make_expr r)
+  |VTop -> Top
+  |VBottom -> Bottom
+
+(*
+  eval ::expr -> env_type -> value
+       input -> current_state -> result
+*)
+let rec eval expr state = match expr with
+  N a -> VN a
+  |F a -> VF a
+  |C a -> VC a
+  |Tuple a -> VTuple (List.map a (fun a -> eval a state))
+  |B b -> VB b
+  |Lam (t, str, body) -> VLam expr
+  |List (a, b) -> VList (eval a state, eval b state)
+  |Unit -> VUnit
+  |Var _ -> raise (Failure "Can't evaluate variables")
+  |Equal (a, b) -> VB(eval a state = eval b state) 
+  |Record fields -> VRecord fields
+
+(* Numerical Functions  *)
+
+  |Mul (a, b) -> begin
+    match (eval a state, eval b state) with
+      (VN x, VN y) -> VN(x*y)
+      |(VN x, VF y) -> VF ((Float.of_int x)*.y)
+      |(VF x, VN y) -> VF(x*.(Float.of_int y))
+      |(VF x, VF y) -> VF(x*.y)
+      |_ -> invalid_arg "Invalid args for multiplication."
+    end      
+  |Add (a, b) -> begin
+    match (eval a state, eval b state) with
+      (VN x, VN y) -> VN(x+y)
+      |(VN x, VF y) -> VF ((Float.of_int x)+.y)
+      |(VF x, VN y) -> VF(x+.(Float.of_int y))
+      |(VF x, VF y) -> VF(x+.y)
+      |_ -> invalid_arg "Invalid args for addition."
+    end
+  |Sub (a, b) -> begin
+    match (eval a state, eval b state) with
+      (VN x, VN y) -> VN(x-y)
+      |(VN x, VF y) -> VF ((Float.of_int x)-.y)
+      |(VF x, VN y) -> VF(x-.(Float.of_int y))
+      |(VF x, VF y) -> VF(x-.y)
+      |_ -> invalid_arg "Invalid args for subtracton." 
+    end
+  |App (lam, var) -> begin
+    match eval lam state with
+      VLam(Lam (t, str, body)) -> eval (subst str var body) state
+      |_ -> invalid_arg "Invalid args for application."
+    end
+
+(* Boolean Functions *)
+  |If (condition, thenCase, elseCase) -> begin
+    match eval condition state with
+      VB true -> eval thenCase state 
+      |VB false -> eval elseCase state
+      |_ -> invalid_arg "Invalid condition for if."
+    end
+  |And (a, b) -> begin
+    match (eval a state, eval b state) with
+      (VB x, VB y) -> VB(x&&y)
+      |something -> invalid_arg "Invalid args for and." 
+    end
+  |Or(a, b) -> begin
+    match (eval a state, eval b state) with
+      (VB x, VB y) -> VB(x||y)
+      |_ -> invalid_arg "Invalid args for or."
+    end     
+  |Not a ->begin
+    match eval a state with
+      VB x -> VB(not x)
+      |_ -> invalid_arg "Invalid arg for not."
+    end 
+(* List and pair functions *)
+  |Concat (a, b) -> begin
+    match a with
+      Unit -> eval b state(* TODO Suspicious *)
+      |List (head, rest) -> eval(List (head, (make_expr(eval(Concat (rest, b)) state)))) state
+      |_ -> invalid_arg "Concat failed."
+    end
+  |Get (index, mylist) -> begin
+    match eval index state with (* Get the indexth member of list. *)
+      (VN num)->if(num<=0) 
+        then invalid_arg "Index out of bounds."
+        else if num = 1 
+          then eval(Head mylist) state
+          else eval(Get (N (num-1), make_expr(eval (Tail mylist) state))) state
+      |_ -> invalid_arg "Not a number index"
+    end
+  |Head (List (a, _)) -> eval a state
+  |Tail (List (_, b)) -> eval b state
+  |GetRec (str, (Record [(k,v)])) -> if str = k then eval v state else invalid_arg "Key not found."
+  |GetRec (str, (Record ((k,v)::record))) -> if str = k then eval v state else eval(GetRec (str, (Record record))) state
+  |LetN ([(str,be)], body) -> eval (subst str be body) state
+  |LetN (((str,be)::more), body) -> eval (LetN (more, (subst str be body))) state
+  |Fix body -> eval (App (body, (Fix body))) state
+  |As (expr, _) -> eval expr state 
+  |TL a -> VL(eval a state)
+  |TR a -> VR(eval a state)
+  |Case (expr, left, right) -> begin
+    match eval expr state with
+      VL a -> eval(App (left, (make_expr a))) state
+      |VR b -> eval(App (right,(make_expr b))) state
+      |_ -> invalid_arg "Case of non-union."
+    end
+  |Seq [a] -> eval a state
+  |(Seq (a::b)) -> eval a state;
+    eval (Seq b) state
+  |Set (_, name, a) -> Hashtbl.add state name (eval a state); VUnit
+  |Lookup name -> Hashtbl.find_exn state name
+  |While (guard, body) -> begin
+    match eval guard state with
+      VB true -> eval body state;
+                 eval(While (guard, body)) state
+      |VB false -> VUnit
+      |_-> invalid_arg "Loop guard non-bool."
+    end
+  |Top -> VTop
+  |Bottom -> raise (Failure "Attempt to eval Bottom")
+  |_ -> invalid_arg "Not a valid expression."
+
+(*
+  exec :: expr         -> Val
+      thingToCheck -> What it returns
+  Make sure the expr is typesafe and evaluate it if it is.
+*)
+
+let exec a = typecheck a (Hashtbl.create ~hashable:String.hashable ()); eval a (Hashtbl.create ~hashable:String.hashable ())
+
+(*
 
 
 (* Num tests *)
