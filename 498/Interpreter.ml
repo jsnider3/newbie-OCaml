@@ -24,7 +24,7 @@ type expr = N of int | F of float| Add of (expr * expr) | Mul of (expr * expr) |
 (* I would prefer to call kind "type", but that is very much not allowed in OCaml.*)
 and kind = TInt | TReal | TBool | TChar | TFunc of (kind * kind) | TTuple of kind list | TyL of kind |
            TyR of kind | TList of (kind * int) | TRecord of (string * kind) list | TUnit | TSum of (kind * kind) | 
-           TDone | TTop | TBottom | TStr
+           TTop | TBottom | TStr
 
 type value = VB of bool | VC of char | VTuple of value list | VList of (value * value) | VUnit | VL of value | VR of value | VDone|
              VN of int |VF of float| VLam of expr | VRecord of (string * expr) list | VTop | VBottom
@@ -36,144 +36,146 @@ type type_map = (string, kind) Hashtbl.t;;
   sub_type ::kind->kind->bool
 *)
 let rec subtype t1 t2 = match  (t1, t2) with
-                      (TInt, TReal) ->true
-                      |(TBottom, _) -> true
-                      |(_, TTop) -> true
-                      |((TRecord rec1),(TRecord rec2)) -> raise (Failure "Not yet implemented: Should be length(rec2 setminus rec1) = 0") 
-                      |(TFunc(a,b),TFunc(c,d)) -> subtype c a && subtype b d
-                      |(a,b) -> a = b;;
+  (TInt, TReal) ->true
+  |(TBottom, _) -> true
+  |(_, TTop) -> true
+  |((TRecord rec1),(TRecord rec2)) -> raise (Failure "Not yet implemented: Should be length(rec2 setminus rec1) = 0") 
+  |(TFunc(a,b),TFunc(c,d)) -> subtype c a && subtype b d
+  |(a,b) -> a = b;;
 
 (*
   common_type ::kind->kind->kind
 *)
 let common_type t1 t2 = match (t1, t2) with
-                          ((TRecord a),(TRecord b)) -> raise (Failure "TODO TRecord(intersect a b)")
-                          |(a,b) -> if subtype a b then b else if subtype b a then a else TTop
+  ((TRecord a),(TRecord b)) -> raise (Failure "TODO TRecord(intersect a b)")
+  |(a,b) -> if subtype a b then b else if subtype b a then a else TTop
 
 let echo_first f s = f;;
 (*
-  typecheck ::expr                  ->kind
-        suspicious expression ->type it returns
+  typecheck ::expr -> env_type -> kind
+        suspicious expression -> lookup table -> type it returns
   Makes sure an expression uses types correctly and either returns 
-  a value of a single type or  returns an error.
+  a value of a single type or returns an error.
 *)      
 (*typecheck ::expr->State TEnv kind --[(string,kind)]->([(string,kind)],kind)*)
 let rec typecheck expr env = match expr with
-                        C _ -> TChar
-                       |N _ -> TInt
-                       |F _ -> TReal
-                       |B _ -> TBool
-                       |Unit -> TUnit
-                       |Equal (_,_) -> TBool
-                       |Add (a, b) -> typecheck (Sub (a,b)) env
-                       |Mul (a, b) -> typecheck (Sub (a,b)) env
-                       |Sub (a, b) -> if subtype(typecheck a env) TReal && subtype(typecheck b env) TReal 
-                                        then common_type (typecheck a env)(typecheck b env) 
-                                        else raise (Failure "Can't do arithmetic on non-numbers.")
-                       |Or  (a,b) -> typecheck (And (a, b)) env
-                       |And (a, b) -> if subtype(typecheck a env) TBool && subtype(typecheck b env) TBool 
-                                        then common_type (typecheck a env)(typecheck b env) 
-                                        else raise (Failure "Can't do bool ops on non-bools.")
-                       |Done -> raise (Failure "TODO Remove done") (* TDone *)
-                       |If (a, b, c) -> if subtype(typecheck a env) TBool 
-                                          then common_type(typecheck b env)(typecheck c env) (*TODO DEBUG Original code checked that neither changed the state. *)
-                                          else raise (Failure "If has non-bool condition")
-                       |Not a -> if subtype(typecheck a env) TBool then TBool else raise (Failure "Not of non-bool")                                                  
-                       (* FIXME |Tuple a -> TTuple (List.map (List.init (List.length a) (echo_first env))(typecheck a)) *)
-                       |Head a -> begin
-                                  match typecheck a env with
-                                    TList (type1, _) -> type1
-                                    |_ -> raise (Failure "Head only works on lists.")
-                                  end
-                       |Tail a -> begin
-                                  match typecheck a env with
-                                    TList (listType, len) -> begin
-                                                             match a with
-                                                               List (_, Unit) -> TUnit 
-                                                               |List (_, _) -> TList (listType, (len-1))
-                                                               |_ -> raise (Failure "Rest only works on pairs and lists.")
-                                                             end
-                                    |_ -> raise (Failure "Can't apply tail to non-lists")
-                                  end
-                       |Concat (a, b) ->  begin
-                                          match (typecheck a env, typecheck b env ) with
-                                            (TList (type1, alen), TList (type2, blen)) -> TList ((common_type type1 type2), (alen + blen))
-                                            |_ -> raise (Failure "Can't concat non-lists.")
-                                          end
-                       |List (head, rest) -> begin
-                                             match typecheck head env with
-                                             TUnit -> raise (Failure "Lists cannot be headed by null.")
-                                             |TList (_, _) -> raise (Failure "Lists cannot be headed by lists.")
-                                             |goodType -> match typecheck rest env with
-                                                          TUnit -> TList (goodType, 1)
-                                                          |TList (type2, len) -> TList ((common_type goodType type2), (len+1))
-                                                          |type2 -> raise (Failure "List was terminated inappropriately.")
-                                             end
-                       |Get (ind, mylist) -> begin
-                                            match(typecheck ind env, typecheck mylist env ) with
-                                              (TInt, TList (type1, _)) -> type1
-                                              |_ -> raise (Failure "Get requires a list to work with.")
-                                            end
-                       |Seq [a] -> typecheck a env
-                       |Seq (a::b) -> typecheck a env;
-                       |App ((Fix lam),var) ->  begin
-                                                match typecheck (Fix lam) env with
-                                                  TFunc(TFunc(from2,to2),TFunc(from1,to1))-> if subtype(typecheck var env)from2 && subtype from2 from1&&subtype to1 to2 
-                                                                                  then to1 else raise (Failure "Input to a lambda is of inappropriate type.")
-                                                  |_ -> raise (Failure "Typecheck failed, at an Application to a fix.")
-                                                end
-                       |App (lam, var) -> begin
-                                          match typecheck lam env  with
-                                            TFunc(from1, to1)->if subtype( typecheck var env) from1 
-                                                            then to1
-                                                            else raise (Failure "Input to a lambda is of inappropriate type.")
-                                            |_ -> raise (Failure "Application is done to a non-lambda.")
-                                          end
-                       |Lam (t, s, b) -> Hashtbl.add env s t;
-                                     TFunc(t,typecheck b env)
-                       |Fix (Lam (t, s, b)) -> typecheck (Lam (t, s, b)) env
-                       |Fix something -> raise (Failure "Typecheck for fix failed.")
-                       |Var st -> Hashtbl.find_exn env st
-                       |_ -> raise (Failure "TODO Not yet implemented")
-                       |As (expr, ty) ->  match (expr,ty) with
-                                            (TL a,TSum (left, right))-> if subtype(typecheck a env)left
-                                                                          then if left = right 
-                                                                                then raise (Failure "Sums must be two different types. TL")
-                                                                                else TSum (left, right)
-                                                                          else error"Typecheck of as failed. TL"
-                                            |(TR b,TSum (left, right))-> if subtype(typecheck b env)right 
-                                                                          then if left = right
-                                                                                then raise (Failure "Sums must be two different types. TR")
-                                                                                else TSum (left, right) 
-                                                                          else raise (Failure "Typecheck of as failed. TR")
-                       |Case (expr, left, right) -> begin
-                                                    match typecheck expr env with
-                                                      TSum (l, r) -> begin 
-                                                                     match (typecheck left env, typecheck right env) with
-                                                                       (TFunc(a,b),TFunc(c,d))->if(subtype l a&&subtype r c)
-                                                                                                  then common_type b d
-                                                                                                  else raise (Failure "Typechecking failure for case lambda.")
-                            _                                        ->error$"Case doesn't have two lambdas."
-                                                                     end
-                                                      _->error $"Case doesn't typecheck to sum."
-                                                    end
-                       |While (guard, body) -> begin
-                                               match typecheck guard env with
-                                                TBool -> typecheck body env; TUnit
-                                                _->error $"Guard must be boolean"
-                                               end
-                       |Lookup name -> Hashtbl.find_exn env st
-                       |Set (ty, name, expr) -> raise (Failure "TODO")(*
-                                                  if(subtype(evalState(typecheck expr)env)ty)
-                                                  then if evalState(free(name,ty))env 
-                                                        then do {put $(Map.insert name ty env);return TDone}
-                                                        else raise  "Attempt to change type of variable." 
-                                                   else raise (Failure "Set has assignent of wrong type."
-                                                  *)
-(*typecheck(Record fields)= do
-  env<-get
-  return(TRecord $ zip(map fst fields)((zipWith evalState(map typecheck(map snd fields))(replicate (length fields)env))))
-typecheck(GetRec str (Record[(k,v)]))=if(k==str)then typecheck v  else error $"Record doesn't possess the specified field."     *)
+  C _ -> TChar
+  |N _ -> TInt
+  |F _ -> TReal
+  |B _ -> TBool
+  |Unit -> TUnit
+  |Equal (_,_) -> TBool
+  |Add (a, b) -> typecheck (Sub (a,b)) env
+  |Mul (a, b) -> typecheck (Sub (a,b)) env
+  |Sub (a, b) -> if subtype(typecheck a env) TReal && subtype(typecheck b env) TReal 
+    then common_type (typecheck a env)(typecheck b env) 
+    else raise (Failure "Can't do arithmetic on non-numbers.")
+  |Or  (a,b) -> typecheck (And (a, b)) env
+  |And (a, b) -> if subtype(typecheck a env) TBool && subtype(typecheck b env) TBool 
+    then common_type (typecheck a env)(typecheck b env) 
+    else raise (Failure "Can't do bool ops on non-bools.")
+  |If (a, b, c) -> if subtype(typecheck a env) TBool 
+    then common_type(typecheck b env)(typecheck c env) (*TODO DEBUG Original code checked that neither changed the state. *)
+    else raise (Failure "If has non-bool condition")
+  |Not a -> if subtype(typecheck a env) TBool then TBool else raise (Failure "Not of non-bool")                                                  
+  |Tuple a -> TTuple (List.map a (fun a -> typecheck a env)) 
+  |Head a -> begin
+    match typecheck a env with
+      TList (type1, _) -> type1
+      |_ -> raise (Failure "Head only works on lists.")
+    end
+  |Tail a -> begin
+    match typecheck a env with
+      TList (listType, len) -> begin
+        match a with
+          List (_, Unit) -> TUnit 
+          |List (_, _) -> TList (listType, (len-1))
+          |_ -> raise (Failure "Tail only works on pairs and lists.")
+        end
+      |_ -> raise (Failure "Can't apply tail to non-lists")
+    end
+  |Concat (a, b) ->  begin
+    match (typecheck a env, typecheck b env ) with
+      (TList (type1, alen), TList (type2, blen)) -> TList ((common_type type1 type2), (alen + blen))
+      |_ -> raise (Failure "Can't concat non-lists.")
+    end
+  |List (head, rest) -> begin
+    match typecheck head env with
+      TUnit -> raise (Failure "Lists cannot be headed by null.")
+      |TList (_, _) -> raise (Failure "Lists cannot be headed by lists.")
+      |goodType -> match typecheck rest env with
+        TUnit -> TList (goodType, 1)
+        |TList (type2, len) -> TList ((common_type goodType type2), (len+1))
+        |type2 -> raise (Failure "List was terminated inappropriately.")
+    end
+  |Get (ind, mylist) -> begin
+    match(typecheck ind env, typecheck mylist env ) with
+      (TInt, TList (type1, _)) -> type1
+      |_ -> raise (Failure "Get requires a list to work with.")
+    end
+  |Seq [a] -> typecheck a env
+  |Seq (a::b) -> typecheck a env
+  |App ((Fix lam),var) ->  begin
+    match typecheck (Fix lam) env with
+      TFunc(TFunc(from2,to2),TFunc(from1,to1))-> if subtype(typecheck var env)from2 && subtype from2 from1&&subtype to1 to2 
+        then to1 
+        else raise (Failure "Input to a lambda is of inappropriate type.")
+      |_ -> raise (Failure "Typecheck failed, at an Application to a fix.")
+    end
+  |App (lam, var) -> begin
+    match typecheck lam env  with
+      TFunc(from1, to1)->if subtype( typecheck var env) from1 
+        then to1
+        else raise (Failure "Input to a lambda is of inappropriate type.")
+      |_ -> raise (Failure "Application is done to a non-lambda.")
+    end
+  |Lam (t, s, b) -> (Hashtbl.add env s t; TFunc(t,typecheck b env))
+  |Fix (Lam (t, s, b)) -> typecheck (Lam (t, s, b)) env
+  |Fix something -> raise (Failure "Typecheck for fix failed.")
+  |Var st -> Hashtbl.find_exn env st
+  |As (expr, ty) -> typecheck_as (expr, ty) env  
+  |Case (expr, left, right) -> typecheck_case (expr,left,right) env
+  |While (guard, body) -> if typecheck guard env = TBool
+    then (typecheck body env; TUnit)
+    else raise (Failure "Guard mus be boolean")
+  |Lookup name -> Hashtbl.find_exn env name
+  |Set (ty, name, expr) ->   if subtype (typecheck expr env)ty
+    then match (Hashtbl.find env name) with
+      Some ty1 -> if ty1 = ty 
+        then TUnit  
+        else raise (Failure "Attempt to change type of variable.")
+      |_ -> Hashtbl.add env name ty; TUnit
+    else raise (Failure "Set has assignent of wrong type.")
+  |Record fields -> TRecord (List.zip_exn(List.map fields fst)(List.map (List.map fields snd)(fun a -> typecheck a env)))
+  |GetRec (str, (Record[(k,v)])) -> if k = str then typecheck v env else raise (Failure "Record doesn't possess the specified field." )
+  |GetRec (str, (Record((k,v)::fields))) -> if k = str then typecheck v env  else typecheck (GetRec (str,Record fields)) env
+  |_ -> raise (Failure "TODO Not yet implemented")
+
+and typecheck_case (expr, left, right) env = begin
+  match typecheck expr env with
+    TSum (l, r) -> (
+      match (typecheck left env, typecheck right env) with
+        (TFunc(a,b), TFunc(c,d)) -> (if subtype l a && subtype r c
+          then common_type b d
+          else raise (Failure "Typechecking failure for case lambda."))
+        |_ -> raise (Failure "Case doesn't have two lambdas.")
+      )
+    |_-> raise (Failure "Case doesn't typecheck to sum.")
+  end
+
+and typecheck_as (expr, ty) env = match (expr,ty) with (* TODO DEBUG This code is suspicious *)
+  (TL a,TSum (left, right))-> if subtype(typecheck a env)left
+    then if left = right 
+      then raise (Failure "Sums must be two different types. TL")
+      else TSum (left, right)
+    else raise (Failure "Typecheck of as failed. TL")
+  |(TR b,TSum (left, right))-> if subtype(typecheck b env)right 
+    then if left = right
+      then raise (Failure "Sums must be two different types. TR")
+      else TSum (left, right) 
+    else raise (Failure "Typecheck of as failed. TR")
+  |_ -> invalid_arg "typecheck_as"
+;;
 
 (*
 (*
@@ -245,36 +247,36 @@ subst :: string -> expr  ->      expr
            var     replacement   thingToSubThrough Done 
 *)
 let rec subst str rep body = match body with
-                          (N a) -> (N a)
-                         |(F a) -> (F a)
-                         |(B a) -> (B a)
-                         |(Unit) -> Unit
-                         |(Lookup name)-> Lookup name
-                         |Var st->if(st=str) then rep else (Var st)
-                         |Add (arg1, arg2) -> Add ((subst str rep arg1),(subst str rep arg2))
-                         |Mul (arg1, arg2) -> Mul ((subst str rep arg1),(subst str rep arg2))
-                         |Sub (arg1, arg2) -> Sub ((subst str rep arg1),(subst str rep arg2))
-                         |And (arg1, arg2) -> And ((subst str rep arg1),(subst str rep arg2))
-                         |Or (arg1,arg2) -> Or ((subst str rep arg1),(subst str rep arg2))
-                         |Not arg1 -> Not (subst str rep arg1)
-                         |If (arg1, arg2, arg3) -> If ((subst str rep arg1),(subst str rep arg2),(subst str rep arg3))
-                         |Equal (arg1, arg2) -> Equal((subst str rep arg1),(subst str rep arg2))
-                         |Lam (t, st, b) -> if(st=str) then (Lam (t, st, b)) else Lam (t, st, (subst str rep b))
-                         |App (arg1, arg2) -> App ((subst str rep arg1),(subst str rep arg2))
-                         (* TODO |Tuple a -> Tuple(List.map(subst str rep) a)  *)
-                         |Get (index, mylist) -> Get ((subst str rep index),(subst str rep mylist))
-                         |Tail a -> Tail(subst str rep a)
-                         |Head a -> Head(subst str rep a)
-                         |List (head, rest) -> List ((subst str rep head),(subst str rep rest))
-                         |Fix expr-> Fix (subst str rep expr)
-                         |As (expr, ty)->As ((subst str rep expr),ty)
-                         |TL a->TL ( subst str rep a)
-                         |TR b->TR (subst str rep b)
-                         (* TODO |LetN things body-> LetN (zip(map fst things)(map(subst str rep)(map snd things))) (subst str rep body)  *)
-                         (* TODO |Seq a -> Seq (List.map (subst str rep) a) *)
-                         |Set (ty, name, a) ->Set (ty, name, (subst str rep a))
-                         |While (guard, body) -> While ((subst str rep guard),(subst str rep body))
-                         |_ ->raise(Failure "Invalid body for substitution.")
+  (N a) -> (N a)
+  |(F a) -> (F a)
+  |(B a) -> (B a)
+  |(Unit) -> Unit
+  |(Lookup name)-> Lookup name
+  |Var st->if(st=str) then rep else (Var st)
+  |Add (arg1, arg2) -> Add ((subst str rep arg1),(subst str rep arg2))
+  |Mul (arg1, arg2) -> Mul ((subst str rep arg1),(subst str rep arg2))
+  |Sub (arg1, arg2) -> Sub ((subst str rep arg1),(subst str rep arg2))
+  |And (arg1, arg2) -> And ((subst str rep arg1),(subst str rep arg2))
+  |Or (arg1,arg2) -> Or ((subst str rep arg1),(subst str rep arg2))
+  |Not arg1 -> Not (subst str rep arg1)
+  |If (arg1, arg2, arg3) -> If ((subst str rep arg1),(subst str rep arg2),(subst str rep arg3))
+  |Equal (arg1, arg2) -> Equal((subst str rep arg1),(subst str rep arg2))
+  |Lam (t, st, b) -> if(st=str) then (Lam (t, st, b)) else Lam (t, st, (subst str rep b))
+  |App (arg1, arg2) -> App ((subst str rep arg1),(subst str rep arg2))
+  (* TODO |Tuple a -> Tuple(List.map(subst str rep) a)  *)
+  |Get (index, mylist) -> Get ((subst str rep index),(subst str rep mylist))
+  |Tail a -> Tail(subst str rep a)
+  |Head a -> Head(subst str rep a)
+  |List (head, rest) -> List ((subst str rep head),(subst str rep rest))
+  |Fix expr-> Fix (subst str rep expr)
+  |As (expr, ty)->As ((subst str rep expr),ty)
+  |TL a->TL ( subst str rep a)
+  |TR b->TR (subst str rep b)
+  (* TODO |LetN things body-> LetN (zip(map fst things)(map(subst str rep)(map snd things))) (subst str rep body)  *)
+  (* TODO |Seq a -> Seq (List.map (subst str rep) a) *)
+  |Set (ty, name, a) ->Set (ty, name, (subst str rep a))
+  |While (guard, body) -> While ((subst str rep guard),(subst str rep body))
+  |_ ->raise(Failure "Invalid body for substitution.")
 (*
   eval ::expr  ->Val
        input ->result
@@ -460,7 +462,7 @@ make_expr(VList a b)=List (make_expr a)(make_expr b)
 make_expr(VRecord stuff)=Record stuff
 make_expr(VNull)=Null
 
-(*
+
 (* Num tests *)
 n1 = Mul (Add(N 2)(N 3))(N 4)
 n2 = Add (N 2)  (Mul (N 3) (N 4))
@@ -640,7 +642,7 @@ boolTests=[(b1,VB True),(b2,VB False),(b3,VB True),(b4,VB False)
       ,(b9,VB False),(b10,VB True),(b11,VB True),(b12,VB False)
       ,(t5,VB False)]
       
-execTests=[(n1,VN 20),(n2,VN 14),(n3,VN 1),(n4,VN 123) ,(s4A,VN 25),
+execTests=[(n1,VN 20),(n2,VN 14),(n3,VN 1),(n4,VN 123),(s4A,VN 25),
       (s5A,VN 24) -- ,(s6A,s6Evaled)
       ,(f1,f1A),(f2,VN 5),(f5,f5A)
       ,(f6,VN 25),(t4,VB True),(t5,VB False),(t6,(VList (VN 5)(VList (VN 1)(VNull))))
@@ -721,5 +723,4 @@ main = do
   putStrLn("execTestResults passed=" ++show (and execTestResults))
   putStrLn("subtypeTestResults passed=" ++show (and subtypeTestResults))
   putStrLn("all passed=" ++show okay)
-*)
 *)
