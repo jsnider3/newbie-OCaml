@@ -1,12 +1,10 @@
-#use "topfind"
-#thread
-#require "dynlink"
-#camlp4o
-#require "core"
-#require "core_extended"
-#require "core.top"
-#require "batteries"
+module Interpreter498 = struct
 open Core.Std
+
+(* I would prefer to call kind "type", but that is very much not allowed in OCaml.*)
+type kind = TInt | TReal | TBool | TChar | TFunc of (kind * kind) | TTuple of kind list | TyL of kind |
+           TyR of kind | TList of (kind * int) | TRecord of (string * kind) list | TUnit | TSum of (kind * kind) | 
+           TTop | TBottom | TStr
 
 type expr = N of int | F of float| Add of (expr * expr) | Mul of (expr * expr) | Sub of (expr * expr)
     |And of (expr * expr) | Or of (expr * expr) |Not of expr |If of (expr * expr * expr) |Equal of (expr * expr) | B of bool
@@ -19,11 +17,6 @@ type expr = N of int | F of float| Add of (expr * expr) | Mul of (expr * expr) |
     |Seq of expr list |Set of (kind * string * expr) |Lookup of string |While of (expr * expr)
     |Top | Bottom
     |C of char
-
-(* I would prefer to call kind "type", but that is very much not allowed in OCaml.*)
-and kind = TInt | TReal | TBool | TChar | TFunc of (kind * kind) | TTuple of kind list | TyL of kind |
-           TyR of kind | TList of (kind * int) | TRecord of (string * kind) list | TUnit | TSum of (kind * kind) | 
-           TTop | TBottom | TStr
 
 type value = VB of bool | VC of char | VTuple of value list | VList of (value * value) | VUnit | VL of value | VR of value |
              VN of int |VF of float| VLam of expr | VRecord of (string * expr) list | VTop | VBottom
@@ -372,6 +365,7 @@ let rec eval expr state = match expr with
 
 let exec a = typecheck a (Hashtbl.create ~hashable:String.hashable ()); eval a (Hashtbl.create ~hashable:String.hashable ())
 
+end;;
 (*
 
 
