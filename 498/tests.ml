@@ -180,16 +180,15 @@ let execTests=[(n1,VN 20);(n2,VN 14);(n3,VN 1);(n4,VN 123);(s4A,VN 25);
       ;(f6,VN 25);(t4,VB true);(t5,VB false);(t6,(VList (VN 5,VList (VN 1,VUnit))))
       ;(t8,VList (VN 5,VList (VN 1,VUnit)))
       ;(t9, VLam (Lam (TList (TReal, 3), "x", Equal (Var "x",List (N 1,List (N 3,List (N 2,Unit)))))))
-      ;(t10,VN 3);(t11,VList (VN 1,VUnit));(sum1,VL(VN 5));(sum2,VR(VB true));(case1,VN 5);(case2,VN 4)
+      ;(t10,VN 3);(t11,VList (VN 1,VUnit));(sum1,VL(VN 5));(sum2,VR(VB true));(case1,VN 5)](*;(case2,VN 4)
       ;(rec1,VRecord[("age",N 18);("shoe-size",N 14)]);(rec2,VN 14);(rec3,VN 18)
       ;(App (fibonacci, N 4),VN 3);(sum4,VL(VN 5));(sum5,VR(VB false));(case3,VN 5);(case4,VN 3)
-      ;(s14A,VN 1);(Unit,VUnit)]
+      ;(s14A,VN 1);(Unit,VUnit)]*)
       
-let funcTests=[(f1,f1A);(f2,VN 5);(f3,f3A);(f5,f5A)
-      ;(f6,VN 25)]
+let funcTests=[(f1,f1A);(f2,VN 5);(f3,f3A);(f5,f5A);(f6,VN 25)]
     
-let subTests=[(s1Q,s1A);(s2Q,s2A);(s3Q,s3A);(s4Q,s4A);(s5Q,s5A);
-       (s9,s9A);(s10,s10A);(s11,s11A);(s12,s12A);(s13,s13A);(s14,s14A);(s15,s15A)]
+let subTests=[(s1Q,s1A);(s2Q,s2A);(s3Q,s3A);(s4Q,s4A);(s5Q,s5A);(s9,s9A);
+      (s10,s10A);(s11,s11A);(s12,s12A);(s13,s13A);(s14,s14A);(s15,s15A)]
 
 let typeTests=[ (n1,TInt);(n2,TInt);(n3,TInt);(n4,TInt);(b1,TBool);
       (b2,TBool);(b3,TBool);(b4,TBool);(b5,TBool);(b6,TBool);
@@ -208,7 +207,7 @@ let subtypeTests=[(TInt,TReal,true);(TReal,TReal,true);(TReal,TInt,false);(rec4T
 let testResults = List.map numTests (fun(t,v) -> eval t (Hashtbl.create ~hashable:String.hashable ()) = v)
 let pairTestResults = List.map pairTests (fun(t,v) -> exec t = v)
 let boolTestResults = List.map boolTests (fun(t,v) -> exec t = v)
-let funcTestResults = List.map funcTests (fun(t,v) -> exec t = v)
+let funcTestResults = List.map funcTests (fun(t,v) -> eval t (Hashtbl.create ~hashable:String.hashable ()) = v)
 let execTestResults = List.map execTests (fun(t,v) -> exec t = v)
 let subTestResults  = List.map subTests (fun(t,v) -> t = v)
 let typeTestResults = List.map typeTests (fun(t,v)-> typecheck t (Hashtbl.create ~hashable:String.hashable ()) = v)
@@ -231,14 +230,14 @@ let okay = (all testResults) && (all boolTestResults) && (all subTestResults) &&
            (all execTestResults) && (all subtypeTestResults)
 
 let main () = 
-  print_endline("testResults passed=");(* ^ (string_of_bool (List.foand testResults))*)
-  print_endline("boolTestResults passed=");(* ^ (and boolTestResults))*)
-  print_endline("subTestResults passed=");(* ^ (and subTestResults))*)
-  print_endline("funcTestResults passed=");(* ^ (and funcTestResults))*)
-  print_endline("typeTestResults passed=");(* ^ (and typeTestResults))*)
-  print_endline("pairTestResults passed=");(* ^ (and pairTestResults))*)
-  print_endline("execTestResults passed=");(* ^ (and execTestResults))*)
-  print_endline("subtypeTestResults passed=");(* ^ (and subtypeTestResults))*)
-  print_endline("all passed=" );;(*++show okay)*)
+  print_endline("testResults passed=" ^ string_of_bool (all testResults));
+  print_endline("boolTestResults passed=" ^ string_of_bool(all boolTestResults));
+  print_endline("subTestResults passed=" ^ string_of_bool(all subTestResults));
+  print_endline("funcTestResults passed=" ^ string_of_bool(all funcTestResults));
+  print_endline("typeTestResults passed=" ^ string_of_bool(all typeTestResults));
+  print_endline("pairTestResults passed=" ^ string_of_bool(all pairTestResults));
+  print_endline("execTestResults passed=" ^ string_of_bool(all execTestResults));
+  print_endline("subtypeTestResults passed=" ^ string_of_bool (all subtypeTestResults));
+  print_endline("all passed=" ^ string_of_bool okay);;
 
 main ()

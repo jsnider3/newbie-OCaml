@@ -24,13 +24,51 @@ type env_type = (string, value) Hashtbl.t;;
 type type_map = (string, kind) Hashtbl.t;;
 
 (*
+  string_of_expr ::expr->string
+*)
+
+let rec string_of_expr arg = match arg with
+  N a -> "N " ^ string_of_int a
+  |F f -> "F " ^ Float.to_string f
+  |B b -> "B " ^ string_of_bool b
+  |Add (a,b) -> "Add(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
+  |Mul (a,b) -> "Mul(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
+  |Sub (a,b) -> "Sub(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
+  |And (a,b) -> "And(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
+  |Or (a,b) -> "Or(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
+  |Not a -> "Not(" ^ string_of_expr a ^ ")"
+  |If (a,b,c)-> "If(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ "," ^ string_of_expr c ^ ")"
+  |Equal (a,b) -> "Equal(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
+  |Lam (a,b,c) -> "Lam(a," ^ b ^ "," ^ string_of_expr c ^ ")"
+  |App (a,b) -> "App(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
+  |Var s -> "Var " ^ s
+  |Tuple lis -> "Tuple [lis]"
+  |List (a,b) -> "List(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
+  |Unit -> "Unit"
+  |Concat (a,b) -> "Concat(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
+  |Get (a,b) -> "Get(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
+  |Head a -> "Head(" ^ string_of_expr a ^ ")"
+  |Tail a -> "Tail(" ^ string_of_expr a ^ ")"
+  |GetRec (a,b) -> "GetRec(" ^ a ^ "," ^ string_of_expr b ^ ")"
+  |TL a -> "TL(" ^ string_of_expr a ^ ")"
+  |TR a -> "TR(" ^ string_of_expr a ^ ")"
+  |Case (a,b,c) -> "Case(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ "," ^ string_of_expr c ^ ")"
+  |As (a,b) -> "As(" ^ string_of_expr a ^ ",kind)"
+  |Lookup a -> "Lookup " ^ a
+  |While (a,b) -> "While(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
+  |_ -> "TODO: string_of_expr"
+
+
+let poly_set = Set.of_list ~comparator:Comparator.Poly.comparator
+
+(*
   sub_type ::kind->kind->bool
 *)
 let rec subtype t1 t2 = match  (t1, t2) with
   (TInt, TReal) ->true
   |(TBottom, _) -> true
   |(_, TTop) -> true
-  |((TRecord rec1),(TRecord rec2)) -> raise (Failure "Not yet implemented: Should be length(rec2 setminus rec1) = 0") 
+  |((TRecord rec1),(TRecord rec2)) -> Set.length(Set.diff (poly_set rec2) (poly_set rec1)) = 0 
   |(TFunc(a,b),TFunc(c,d)) -> subtype c a && subtype b d
   |(a,b) -> a = b;;
 
@@ -68,7 +106,7 @@ let rec typecheck expr env = match expr with
     else raise (Failure "Can't do bool ops on non-bools.")
   |If (a, b, c) -> if subtype(typecheck a env) TBool 
     then common_type(typecheck b env)(typecheck c env) (*TODO DEBUG Original code checked that neither changed the state. *)
-    else raise (Failure "If has non-bool condition")
+    else raise (Failure ("If guard " ^string_of_expr a ^ " is non-bool."))
   |Not a -> if subtype(typecheck a env) TBool then TBool else raise (Failure "Not of non-bool")                                                  
   |Tuple a -> TTuple (List.map a (fun a -> typecheck a env)) 
   |Head a -> begin
@@ -116,12 +154,12 @@ let rec typecheck expr env = match expr with
     end
   |App (lam, var) -> begin
     match typecheck lam env  with
-      TFunc(from1, to1)->if subtype( typecheck var env) from1 
+      TFunc(from1, to1)->if subtype(typecheck var env) from1 
         then to1
         else raise (Failure "Input to a lambda is of inappropriate type.")
       |_ -> raise (Failure "Application is done to a non-lambda.")
     end
-  |Lam (t, s, b) -> (Hashtbl.add env s t; TFunc(t,typecheck b env))
+  |Lam (t, s, b) -> (Hashtbl.replace env s t; TFunc(t,typecheck b env))
   |Fix (Lam (t, s, b)) -> typecheck (Lam (t, s, b)) env
   |Fix something -> raise (Failure "Typecheck for fix failed.")
   |Var st -> Hashtbl.find_exn env st
@@ -139,7 +177,7 @@ let rec typecheck expr env = match expr with
       Some ty1 -> if ty1 = ty 
         then TUnit  
         else raise (Failure "Attempt to change type of variable.")
-      |_ -> Hashtbl.add env name ty; TUnit
+      |_ -> Hashtbl.replace env name ty; TUnit
     else raise (Failure "Set has assignent of wrong type.")
   |Record fields -> TRecord (List.zip_exn(List.map fields fst)(List.map (List.map fields snd)(fun a -> typecheck a env)))
   |GetRec (str, (Record[(k,v)])) -> if k = str then typecheck v env else raise (Failure "Record doesn't possess the specified field." )
@@ -343,7 +381,7 @@ let rec eval expr state = match expr with
   |Seq [a] -> eval a state
   |(Seq (a::b)) -> eval a state;
     eval (Seq b) state
-  |Set (_, name, a) -> Hashtbl.add state name (eval a state); VUnit
+  |Set (_, name, a) -> Hashtbl.replace state name (eval a state); VUnit
   |Lookup name -> Hashtbl.find_exn state name
   |While (guard, body) -> begin
     match eval guard state with
