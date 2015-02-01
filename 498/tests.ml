@@ -181,7 +181,7 @@ let execTests=[(n1,VN 20);(n2,VN 14);(n3,VN 1);(n4,VN 123);(s4A,VN 25);
       ;(t8,VList (VN 5,VList (VN 1,VUnit)))
       ;(t9, VLam (Lam (TList (TReal, 3), "x", Equal (Var "x",List (N 1,List (N 3,List (N 2,Unit)))))))
       ;(t10,VN 3);(t11,VList (VN 1,VUnit));(sum1,VL(VN 5));(sum2,VR(VB true));(case1,VN 5);(case2,VN 4)
-      ;(rec1,VRecord[("age",N 18);("shoe-size",N 14)]);(rec2,VN 14);(rec3,VN 18)
+      ;(rec1,VRecord[("age",VN 18);("shoe-size",VN 14)]);(rec2,VN 14);(rec3,VN 18)
       ;(App (fibonacci, N 4),VN 3);(sum4,VL(VN 5));(sum5,VR(VB false));(case3,VN 5);(case4,VN 3)
       ;(s14A,VN 1);(Unit,VUnit)]
       

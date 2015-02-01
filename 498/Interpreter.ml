@@ -18,7 +18,7 @@ type expr = N of int | F of float| Add of (expr * expr) | Mul of (expr * expr) |
     |C of char
 
 type value = VB of bool | VC of char | VTuple of value list | VList of (value * value) | VUnit | VL of value | VR of value |
-             VN of int |VF of float| VLam of expr | VRecord of (string * expr) list | VTop | VBottom
+             VN of int |VF of float| VLam of expr | VRecord of (string * value) list | VTop | VBottom
 
 type env_type = (string, value) Hashtbl.t;;
 type type_map = (string, kind) Hashtbl.t;;
@@ -266,7 +266,7 @@ let rec make_expr v = match v with
   |VTuple a -> Tuple (List.map a make_expr)
   |VLam lambda -> lambda
   |VList (a, b) -> List ((make_expr a),(make_expr b))
-  |VRecord stuff -> Record stuff
+  |VRecord fields -> Record (List.zip_exn(List.map fields fst)(List.map (List.map fields snd)make_expr))
   |VUnit -> Unit
   |VC c -> C c
   |VF f -> F f
@@ -290,7 +290,7 @@ let rec eval expr state = match expr with
   |Unit -> VUnit
   |Var _ -> raise (Failure "Can't evaluate variables")
   |Equal (a, b) -> VB(eval a state = eval b state) 
-  |Record fields -> VRecord fields
+  |Record fields -> VRecord (List.zip_exn(List.map fields fst)(List.map (List.map fields snd)(fun a -> eval a state)))
 
 (* Numerical Functions  *)
 
