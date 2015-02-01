@@ -4,12 +4,12 @@ The Haskell code requires ghc, libghc-mtl-dev, and libghc-parallel-dev.
 
 HOW TO RUN  
 The Haskell interpreter is compiled with ghc Original.hs and run with ./Original.
-The OCaml code is build with make and run as ./498.
+The OCaml code is built with make and run as ./tests.
 
 THE LANGUAGE  
-Currently, "498" is a software artifact. It has ints, floats, booleans, structs,
-states, structs, tagged unions, state, recursion, lambdas, and loops. It is at 
-the end of the day, an ungodly mess of a language. This is not surprising given
+Currently, "498" is a software artifact. It has ints, floats, booleans, states,
+ structs, tagged unions, state, recursion, lambdas, and loops. It is at the end
+ of the day, an ungodly mess of a language. This is not surprising given
 it's history, the original Haskell was my independent study project back in 
 undergrad. I partially refactored it at the end and then later when I had the urge.  
 
