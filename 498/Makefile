@@ -2,13 +2,13 @@ all: tests
 	@true
 
 tests: Interpreter.cmx tests.ml
-	ocamlfind ocamlopt -o tests -linkpkg -package core -package core_kernel -thread -w -10 Interpreter.cmx tests.ml
+	ocamlfind ocamlopt -g -o tests -linkpkg -package core -package core_kernel -thread -w -10 Interpreter.cmx tests.ml
 
 Interpreter.cmx: Interpreter.ml Interpreter.cmi
-	ocamlfind ocamlopt -c -package core -package core_kernel -thread -w -10 Interpreter.ml
+	ocamlfind ocamlopt -g -c -package core -package core_kernel -thread -w -10 Interpreter.ml
 
 Interpreter.cmi: Interpreter.mli
-	ocamlfind ocamlopt -c -package core -package core_kernel -thread -w -10 Interpreter.mli
+	ocamlfind ocamlopt -g -c -package core -package core_kernel -thread -w -10 Interpreter.mli
 
 Interpreter.mli: Interpreter.ml
 	ocamlfind ocamlc -i -package core -package core_kernel -thread -w -10 Interpreter.ml > Interpreter.mli
