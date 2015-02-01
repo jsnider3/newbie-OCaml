@@ -1,4 +1,3 @@
-module Interpreter = struct
 open Core.Std
 
 (* I would prefer to call kind "type", but that is very much not allowed in OCaml.*)
@@ -365,4 +364,3 @@ let rec eval expr state = match expr with
 
 let exec a = typecheck a (Hashtbl.create ~hashable:String.hashable ()); eval a (Hashtbl.create ~hashable:String.hashable ())
 
-end;;

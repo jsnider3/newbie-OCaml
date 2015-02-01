@@ -1,7 +1,7 @@
 all: tests
 	@true
 
-tests: Interpreter.cmx
+tests: Interpreter.cmx tests.ml
 	ocamlfind ocamlopt -o tests -linkpkg -package core -package core_kernel -thread -w -10 Interpreter.cmx tests.ml
 
 Interpreter.cmx: Interpreter.ml Interpreter.cmi
