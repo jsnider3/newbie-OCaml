@@ -26,12 +26,12 @@ Code as OCaml examples.
 I intend to start working on a third category comprised of programs
 which are actually useful outside of their pedagogical value.
 
-HOW TO RUN  
+# HOW TO RUN  
 All of these are intended to be run as ./ocaml #PROGRAM#, except for
 sundays.ml which takes an additional command line argument corresponding
 to the year.
 
-DEPENDENCIES  
+# DEPENDENCIES  
 With the exception of chess.ml, none of these have have dependencies
 outside of the standard library. chess.ml requires Core to be installed.
 
