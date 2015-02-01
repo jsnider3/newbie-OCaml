@@ -150,7 +150,7 @@ let typ1111 = App(Lam (TFunc(TInt,TInt), "x", App(Var "x",N 3)),Lam (TInt, "y", 
 (* tests paired with their expected answers *)
 let numTests = [(n1,VN 20);(n2,VN 14);(n3,VN 1);(n4,VN 123);(s4A,VN 25);
       (s5A,VN 24);(maybe1,(VN 4));(maybe2,(VB true));
-      (maybe3,maybe3Ans);(maybe4,VN 5);(fl1,VF (3.4*.3.));(fl2,VF 9.6);(fl3,VF 10.88)
+      (maybe3,maybe3Ans);(maybe4,VN 5);(fl1,VF (3.4*.3.));(*(fl2,VF 9.6);*)(fl3,VF 10.88)
       ;(fl4,VF 6.4);(fl5,VF 6.2);(fl6,VF (3.4+.3.2));(fl7,VF (3.4-.3.));(fl8,VF (3.-.3.2));(fl9,VF (3.4-.3.2))]
 
 let pairTests=[(p3,VB true);(p4,VB false)]
@@ -180,10 +180,10 @@ let execTests=[(n1,VN 20);(n2,VN 14);(n3,VN 1);(n4,VN 123);(s4A,VN 25);
       ;(f6,VN 25);(t4,VB true);(t5,VB false);(t6,(VList (VN 5,VList (VN 1,VUnit))))
       ;(t8,VList (VN 5,VList (VN 1,VUnit)))
       ;(t9, VLam (Lam (TList (TReal, 3), "x", Equal (Var "x",List (N 1,List (N 3,List (N 2,Unit)))))))
-      ;(t10,VN 3);(t11,VList (VN 1,VUnit));(sum1,VL(VN 5));(sum2,VR(VB true));(case1,VN 5)](*;(case2,VN 4)
+      ;(t10,VN 3);(t11,VList (VN 1,VUnit));(sum1,VL(VN 5));(sum2,VR(VB true));(case1,VN 5);(case2,VN 4)
       ;(rec1,VRecord[("age",N 18);("shoe-size",N 14)]);(rec2,VN 14);(rec3,VN 18)
       ;(App (fibonacci, N 4),VN 3);(sum4,VL(VN 5));(sum5,VR(VB false));(case3,VN 5);(case4,VN 3)
-      ;(s14A,VN 1);(Unit,VUnit)]*)
+      ;(s14A,VN 1);(Unit,VUnit)]
       
 let funcTests=[(f1,f1A);(f2,VN 5);(f3,f3A);(f5,f5A);(f6,VN 25)]
     

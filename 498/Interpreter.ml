@@ -144,7 +144,7 @@ let rec typecheck expr env = match expr with
       |_ -> raise (Failure "Get requires a list to work with.")
     end
   |Seq [a] -> typecheck a env
-  |Seq (a::b) -> typecheck a env
+  |Seq (a::b) -> typecheck a env; typecheck (Seq b) env
   |App ((Fix lam),var) ->  begin
     match typecheck (Fix lam) env with
       TFunc(TFunc(from2,to2),TFunc(from1,to1))-> if subtype(typecheck var env)from2 && subtype from2 from1&&subtype to1 to2 
