@@ -31,6 +31,7 @@ let rec string_of_expr arg = match arg with
   N a -> "N " ^ string_of_int a
   |F f -> "F " ^ Float.to_string f
   |B b -> "B " ^ string_of_bool b
+  |C c -> "C " ^ Char.to_string c
   |Add (a,b) -> "Add(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
   |Mul (a,b) -> "Mul(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
   |Sub (a,b) -> "Sub(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
@@ -40,11 +41,14 @@ let rec string_of_expr arg = match arg with
   |If (a,b,c)-> "If(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ "," ^ string_of_expr c ^ ")"
   |Equal (a,b) -> "Equal(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
   |Lam (a,b,c) -> "Lam(a," ^ b ^ "," ^ string_of_expr c ^ ")"
+  |Fix a -> "Fix" ^ string_of_expr a
   |App (a,b) -> "App(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
   |Var s -> "Var " ^ s
   |Tuple lis -> "Tuple [lis]"
   |List (a,b) -> "List(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
   |Unit -> "Unit"
+  |Top -> "Top"
+  |Bottom -> "Bottom"
   |Concat (a,b) -> "Concat(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
   |Get (a,b) -> "Get(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
   |Head a -> "Head(" ^ string_of_expr a ^ ")"
@@ -56,7 +60,11 @@ let rec string_of_expr arg = match arg with
   |As (a,b) -> "As(" ^ string_of_expr a ^ ",kind)"
   |Lookup a -> "Lookup " ^ a
   |While (a,b) -> "While(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
-  |_ -> "TODO: string_of_expr"
+  |Record fields -> "Record[" ^ String.concat ~sep:"," (List.map fields (fun field -> fst field ^ string_of_expr (snd field))) ^ "]"
+  |Seq a -> "Sequence[" ^ String.concat ~sep:";" (List.map a (string_of_expr)) ^ "]"
+  |LetN (lets,body) -> "LetN[" ^ String.concat ~sep:"," (List.map lets (fun bind -> fst bind ^ string_of_expr (snd bind))) ^ "] in [" ^
+                          string_of_expr body ^ "]"
+  |Set (k,s,x) -> "Set (k," ^ s ^ string_of_expr x ^ ")"
 
 
 let poly_set = Set.of_list ~comparator:Comparator.Poly.comparator
@@ -76,7 +84,7 @@ let rec subtype t1 t2 = match  (t1, t2) with
   common_type ::kind->kind->kind
 *)
 let common_type t1 t2 = match (t1, t2) with
-  ((TRecord a),(TRecord b)) -> raise (Failure "TODO TRecord(intersect a b)")
+  ((TRecord rec1),(TRecord rec2)) -> TRecord(Set.to_list(Set.union (poly_set rec2) (poly_set rec1)))
   |(a,b) -> if subtype a b then b else if subtype b a then a else TTop
 
 let echo_first f s = f;;
@@ -105,7 +113,7 @@ let rec typecheck expr env = match expr with
     then common_type (typecheck a env)(typecheck b env) 
     else raise (Failure "Can't do bool ops on non-bools.")
   |If (a, b, c) -> if subtype(typecheck a env) TBool 
-    then common_type(typecheck b env)(typecheck c env) (*TODO DEBUG Original code checked that neither changed the state. *)
+    then common_type(typecheck b (Hashtbl.copy env))(typecheck c (Hashtbl.copy env))
     else raise (Failure ("If guard " ^string_of_expr a ^ " is non-bool."))
   |Not a -> if subtype(typecheck a env) TBool then TBool else raise (Failure "Not of non-bool")                                                  
   |Tuple a -> TTuple (List.map a (fun a -> typecheck a env)) 
@@ -161,11 +169,11 @@ let rec typecheck expr env = match expr with
     end
   |Lam (t, s, b) -> (Hashtbl.replace env s t; TFunc(t,typecheck b env))
   |Fix (Lam (t, s, b)) -> typecheck (Lam (t, s, b)) env
-  |Fix something -> raise (Failure "Typecheck for fix failed.")
+  |Fix something -> raise (Failure ("Can't fix on " ^ string_of_expr something))
   |Var st -> Hashtbl.find_exn env st
-  |LetN (things,body) -> raise (Failure "TODO")
-  |TL _ -> raise (Failure "TODO")
-  |TR _ -> raise (Failure "TODO")
+  |LetN (things,body) -> let env = Hashtbl.copy env in List.iter things (fun (s,t) -> Hashtbl.replace env s (typecheck t env)); typecheck body env
+  |TL a -> TyL (typecheck a env)
+  |TR b -> TyR (typecheck b env)
   |As (expr, ty) -> typecheck_as (expr, ty) env  
   |Case (expr, left, right) -> typecheck_case (expr,left,right) env
   |While (guard, body) -> if typecheck guard env = TBool
@@ -196,7 +204,7 @@ and typecheck_case (expr, left, right) env = begin
     |_-> raise (Failure "Case doesn't typecheck to sum.")
   end
 
-and typecheck_as (expr, ty) env = match (expr,ty) with (* TODO DEBUG This code is suspicious *)
+and typecheck_as (expr, ty) env = match (expr,ty) with 
   (TL a,TSum (left, right))-> if subtype(typecheck a env)left
     then if left = right 
       then raise (Failure "Sums must be two different types. TL")
@@ -349,7 +357,7 @@ let rec eval expr state = match expr with
 (* List and pair functions *)
   |Concat (a, b) -> begin
     match a with
-      Unit -> eval b state(* TODO Suspicious *)
+      Unit -> eval b state (* Recursive base case *)
       |List (head, rest) -> eval(List (head, (make_expr(eval(Concat (rest, b)) state)))) state
       |_ -> invalid_arg "Concat failed."
     end
