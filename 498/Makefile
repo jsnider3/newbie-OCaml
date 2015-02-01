@@ -1,8 +1,8 @@
-all: 498
+all: tests
 	@true
 
-498: Interpreter.cmx
-	ocamlfind ocamlopt -o 498 -linkpkg -package core -package core_kernel -thread -w -10 Interpreter.cmx
+tests: Interpreter.cmx
+	ocamlfind ocamlopt -o tests -linkpkg -package core -package core_kernel -thread -w -10 Interpreter.cmx tests.ml
 
 Interpreter.cmx: Interpreter.ml Interpreter.cmi
 	ocamlfind ocamlopt -c -package core -package core_kernel -thread -w -10 Interpreter.ml
@@ -14,5 +14,5 @@ Interpreter.mli: Interpreter.ml
 	ocamlfind ocamlc -i -package core -package core_kernel -thread -w -10 Interpreter.ml > Interpreter.mli
 
 clean:
-	rm *.cmx *.cmi *.o 498
+	rm *.cmx *.cmi *.o tests
 

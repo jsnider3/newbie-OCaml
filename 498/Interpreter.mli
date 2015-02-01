@@ -1,4 +1,4 @@
-module Interpreter498 :
+module Interpreter :
   sig
     type kind =
         TInt
