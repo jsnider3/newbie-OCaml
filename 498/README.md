@@ -1,12 +1,12 @@
-* DEPENDENCIES  
+# DEPENDENCIES  
 The Haskell code requires ghc, libghc-mtl-dev, and libghc-parallel-dev.
   The OCaml code requires the Jane Street core library. 
 
-* HOW TO RUN  
+# HOW TO RUN  
 The Haskell interpreter is compiled with ghc Original.hs and run with ./Original.
 The OCaml code is built with make and run as ./tests.
 
-* THE LANGUAGE  
+# THE LANGUAGE  
 Currently, "498" is a software artifact. It has ints, floats, booleans, states,
  structs, tagged unions, state, recursion, lambdas, and loops. It is at the end
  of the day, an ungodly mess of a language. This is not surprising given
