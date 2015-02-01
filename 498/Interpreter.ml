@@ -18,7 +18,7 @@ type expr = N of int | F of float| Add of (expr * expr) | Mul of (expr * expr) |
     |C of char
 
 type value = VB of bool | VC of char | VTuple of value list | VList of (value * value) | VUnit | VL of value | VR of value |
-             VN of int |VF of float| VLam of expr | VRecord of (string * value) list | VTop | VBottom
+             VN of int |VF of float| VLam of (kind * string * expr) | VRecord of (string * value) list | VTop | VBottom
 
 type env_type = (string, value) Hashtbl.t;;
 type type_map = (string, kind) Hashtbl.t;;
@@ -264,7 +264,7 @@ let rec make_expr v = match v with
   VB a -> B a
   |VN a -> N a
   |VTuple a -> Tuple (List.map a make_expr)
-  |VLam lambda -> lambda
+  |VLam lambda -> Lam lambda
   |VList (a, b) -> List ((make_expr a),(make_expr b))
   |VRecord fields -> Record (List.zip_exn(List.map fields fst)(List.map (List.map fields snd)make_expr))
   |VUnit -> Unit
@@ -285,7 +285,7 @@ let rec eval expr state = match expr with
   |C a -> VC a
   |Tuple a -> VTuple (List.map a (fun a -> eval a state))
   |B b -> VB b
-  |Lam (t, str, body) -> VLam expr
+  |Lam a -> VLam a
   |List (a, b) -> VList (eval a state, eval b state)
   |Unit -> VUnit
   |Var _ -> raise (Failure "Can't evaluate variables")
@@ -320,7 +320,7 @@ let rec eval expr state = match expr with
     end
   |App (lam, var) -> begin
     match eval lam state with
-      VLam(Lam (t, str, body)) -> eval (subst str var body) state
+      VLam(t, str, body) -> eval (subst str var body) state
       |_ -> invalid_arg "Invalid args for application."
     end
 
