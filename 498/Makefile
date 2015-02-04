@@ -14,5 +14,5 @@ Interpreter.mli: Interpreter.ml
 	ocamlfind ocamlc -i -package core -package core_kernel -thread -w -10 Interpreter.ml > Interpreter.mli
 
 clean:
-	rm *.cmx *.cmi *.o tests
+	@rm *.cmx *.cmi *.o tests 2>/dev/null || true
 
