@@ -223,6 +223,25 @@ let rec putval_32 o v = putval o (Int32.to_int_exn v) 32;;
 *)
 
 (*
+  Chapter 6
+*)
+let string_of_int_list l =
+  let s = String.create (List.length l) in
+    List.iteri l (fun n x -> s.[n] <- Char.of_int_exn x);
+    s;;
+
+let rec str_map_helper str f acc ind = 
+  if ind = 0
+    then (f str.[0])::acc
+    else str_map_helper str f ((f str.[ind])::acc) (ind - 1);;
+
+let string_map str f =
+  str_map_helper str f [] ((String.length str) - 1);;
+
+let int_list_of_string l =
+  string_map l (Char.to_int);;
+
+(*
 
 *)
 let test_input_of_chars () =
@@ -235,11 +254,11 @@ let test_input_of_chars () =
   assert ("abc" = (input_string inp 4));;
 
 let test_input_of_channel () =
-  let inp = input_of_channel (open_in "C45BitIO.ml") in
+  let inp = input_of_channel (open_in "BitIO.ml") in
   assert ("open Core.Std;;" = (input_string inp 15));;
 
 let test_line_reader () =
-  let inp = line_reader(input_of_channel (open_in "C45BitIO.ml")) in
+  let inp = line_reader(input_of_channel (open_in "BitIO.ml")) in
   assert ("open Core.Std;;" = (input_string inp 95));;
 
 let test_getbit () = 
@@ -276,7 +295,9 @@ let main () =
   test_line_reader ();
   test_getbit ();
   test_getval ();
-  test_output ();;
+  test_output ();
+  assert ("ABC" = (string_of_int_list [65;66;67]));;
+  assert (int_list_of_string "ABC" = [65;66;67]);;
 
 main ();;
 
