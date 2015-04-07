@@ -41,6 +41,8 @@ let input_of_chars chs = let pos = ref 0 in
     length = List.length chs;
   };;
 
+let rewind i = i.seek_in (max 0 ((i.pos_in ()) - 1));;
+
 (*
   Page 26: Question 2
 *)
@@ -230,17 +232,83 @@ let string_of_int_list l =
     List.iteri l (fun n x -> s.[n] <- Char.of_int_exn x);
     s;;
 
-let rec str_map_helper str f acc ind = 
-  if ind = 0
-    then (f str.[0])::acc
-    else str_map_helper str f ((f str.[ind])::acc) (ind - 1);;
+let int_list_of_string s = List.map (String.to_list s) Char.to_int;;
 
-let string_map str f =
-  str_map_helper str f [] ((String.length str) - 1);;
+let process f s =
+  let b = Buffer.create (String.length s) in
+    f (input_of_string s) (output_of_buffer b);
+    Buffer.contents b;;
 
-let int_list_of_string l =
-  string_map l (Char.to_int);;
+exception EOD;;
 
+type run = 
+  | Verbatim
+  | Repeat
+  | Fin;;
+
+let classify n = 
+  if n = 128 then Fin
+  else if n < 128 then Verbatim
+  else if n > 128 then Repeat
+  else raise (Invalid_argument "classify");;
+
+(*
+  My hatred of Lisp is exceeded only by
+  my hatred of for loops.
+*)
+let rec dotimes f cnt = match cnt with
+  0 -> ()
+  |_ -> f (); dotimes f (cnt - 1);;
+                 
+(*
+  See page 35 for specification.
+  See page 37 for reference implementation.
+*)
+let rec decompress i o =
+  try
+    let x = Char.to_int (i.input_char()) in
+    match classify x with
+      Verbatim ->
+        dotimes (fun () -> o.output_char (i.input_char ())) (x + 1);
+        decompress i o;
+      |Repeat ->
+        let c = i.input_char () in
+          dotimes (fun () -> o.output_char c) (257 - x);
+          decompress i o;
+      |Fin -> raise EOD;
+  with
+    EOD -> ();;
+
+let decompress_string = process decompress;;
+
+let get_same i =
+  (*
+    Count how many times ch occurs in a row.
+  *)
+  let rec getcount ch c = match c with
+    128 -> 128
+    |_ -> 
+      try
+        if i.input_char () = ch
+          then getcount ch (c + 1)
+          else (rewind i; c)
+      with
+        End_of_file -> c
+  in
+    let ch = i.input_char () in (ch, getcount ch 1);;
+
+let get_different i =
+  let rec getdiffinner a c =
+    if c = 128 then List.rev a else
+      try
+        let nxt = i.input_char () in
+          if nxt <> List.hd_exn a
+            then getdiffinner (nxt :: a) (c + 1)
+            else (rewind i; rewind i; List.rev (List.tl_exn a))
+      with
+        End_of_file -> List.rev a
+  in
+    getdiffinner [i.input_char ()] 1;;
 (*
 
 *)
@@ -251,7 +319,13 @@ let test_input_of_chars () =
   assert (inp.input_char () = 'c');
   assert (inp.input_char_opt () = None);
   inp.seek_in 0;
-  assert ("abc" = (input_string inp 4));;
+  assert ("abc" = (input_string inp 4));
+  let p = inp.pos_in () in
+  rewind inp;
+  rewind inp;
+  assert (p = 2 + inp.pos_in ());
+  assert (inp.input_char () = 'b');
+  assert (inp.input_char () = 'c');;
 
 let test_input_of_channel () =
   let inp = input_of_channel (open_in "BitIO.ml") in
@@ -284,10 +358,24 @@ let test_getbit () =
 
 let test_getval () =
   let bits = {input = input_of_chars ['a']; byte = 188; bit = 128} in
-  assert ((getval bits 8) = 188);
-  assert ((getval bits 8) = 97);;
+  assert (getval bits 8 = 188);
+  assert (getval bits 8 = 97);;
 
 let test_output () = ();;
+
+let test_conversion () = let ar = [65; 66; 67] in
+  assert ("ABC" = (string_of_int_list ar));
+  assert (int_list_of_string "ABC" = ar);;
+
+let test_different () = let inp = input_of_chars ['a';'b';'c'] in
+  assert(get_different inp = ['a'; 'b'; 'c']);
+  let same = input_of_chars ['a'; 'a'; 'a'] in
+  assert(get_different same = []);;
+
+let test_samet () = let inp = input_of_chars ['a'; 'b'; 'c'] in
+  assert(get_same inp = ('a', 1));
+  let same = input_of_chars ['a'; 'a'; 'a'] in
+  assert(get_same same = ('a', 3));;
 
 let main () = 
   test_input_of_chars ();
@@ -296,8 +384,8 @@ let main () =
   test_getbit ();
   test_getval ();
   test_output ();
-  assert ("ABC" = (string_of_int_list [65;66;67]));;
-  assert (int_list_of_string "ABC" = [65;66;67]);;
+  test_conversion ();
+  test_different ();;
 
 main ();;
 
