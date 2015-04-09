@@ -117,19 +117,19 @@ let line_reader ch = {ch with
 *)
 type output =
   {
-    output_char : char -> unit;
+    put_char : char -> unit;
     out_channel_length : unit -> int;
   };;
 
 let output_of_channel ch = 
   {
-    output_char = (fun c -> output_char ch c);
+    put_char = (fun c -> output_char ch c);
     out_channel_length = (fun () -> int64_to_int (Out_channel.length ch));
   };;
 
 let output_of_buffer bf = 
   {
-    output_char = (fun c -> Buffer.add_char bf c);
+    put_char = (fun c -> Buffer.add_char bf c);
     out_channel_length = (fun () -> Buffer.length bf);
   };;
 
@@ -140,6 +140,13 @@ type input_bits =
     input : input;
     mutable byte : int;
     mutable bit : int;
+  };;
+
+let input_bits_of_input i =
+  {
+    input = i;
+    byte = 0;
+    bit = 0;
   };;
 
 let bool_to_int b = if b then 1 else 0;;
@@ -185,7 +192,7 @@ let output_bits_of_output out =
   };;
 
 let flush o =
-  if o.bit < 7 then o.output.output_char (char_of_int o.byte);
+  if o.bit < 7 then o.output.put_char (char_of_int o.byte);
   o.byte <- 0;
   o.bit <- 7;;
 
@@ -197,6 +204,10 @@ let rec putbit o b = match o.bit with
 (*
   Page 34 Question 3
 *)
+let int_of_bool b = match b with
+  true -> 1
+  |false -> 0;;
+
 let putbyte o v = o.byte <- v;
   o.bit <- 0;
   flush o;;
@@ -269,11 +280,11 @@ let rec decompress i o =
     let x = Char.to_int (i.input_char()) in
     match classify x with
       Verbatim ->
-        dotimes (fun () -> o.output_char (i.input_char ())) (x + 1);
+        dotimes (fun () -> o.put_char (i.input_char ())) (x + 1);
         decompress i o;
       |Repeat ->
         let c = i.input_char () in
-          dotimes (fun () -> o.output_char c) (257 - x);
+          dotimes (fun () -> o.put_char c) (257 - x);
           decompress i o;
       |Fin -> raise EOD;
   with
@@ -309,6 +320,45 @@ let get_different i =
         End_of_file -> List.rev a
   in
     getdiffinner [i.input_char ()] 1;;
+
+let rec compress i o =
+  try
+    let compress_inner () = match get_same i with
+      (_, 1) ->
+        rewind i;
+        let cs = get_different i in
+          o.put_char (Char.of_int_exn (List.length cs - 1));
+          List.iter cs o.put_char;
+      | (b, cnt) ->
+        o.put_char (Char.of_int_exn (257 - cnt));
+        o.put_char b;
+    in
+      compress_inner (); 
+      compress i o;
+  with
+    End_of_file -> o.put_char (Char.of_int_exn 128);;
+
+let compress_string = process compress;;
+
+let packedstring_of_string s =
+  let b = Buffer.create (String.length s / 8 + 1) in
+  let o = output_bits_of_output (output_of_buffer b) in
+    List.iter (String.to_list s) (fun c -> putbit o (int_of_bool( c = '1')));
+    flush o;
+    Buffer.contents b;;
+
+let print_packedofstring w s =
+  let ibits = input_bits_of_input (input_of_string s) in
+    try
+      let rec loop () =
+        dotimes (fun () -> print_int (int_of_bool (getbit ibits))) w;
+        print_newline ();
+        loop ();
+      in
+        loop ();
+    with
+      End_of_file -> ();;
+
 (*
 
 *)
@@ -377,6 +427,13 @@ let test_samet () = let inp = input_of_chars ['a'; 'b'; 'c'] in
   let same = input_of_chars ['a'; 'a'; 'a'] in
   assert(get_same same = ('a', 3));;
 
+let test_compress () = let str = "((5.000000, 4.583333), (4.500000,5.000000))" in
+  let ans = [255; 40; 1; 53; 46; 251; 48; 5; 44; 32; 52; 46; 53; 56; 253; 51; 6; 
+             41; 44; 32; 40; 52; 46; 53; 252; 48; 2; 44; 53; 46; 251; 48; 
+             255; 41; 128] in
+  assert(ans = int_list_of_string(compress_string str));
+  assert (decompress_string (compress_string str) = str);;
+
 let main () = 
   test_input_of_chars ();
   test_input_of_channel ();
@@ -385,7 +442,8 @@ let main () =
   test_getval ();
   test_output ();
   test_conversion ();
-  test_different ();;
+  test_different ();
+  test_compress ();;
 
 main ();;
 
