@@ -1,4 +1,4 @@
-FILE=BitIO
+FILE=C7Args
 
 all: a.out
 	@(a.out && echo "Tests passed") || true
