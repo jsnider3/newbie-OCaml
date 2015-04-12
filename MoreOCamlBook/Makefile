@@ -1,4 +1,4 @@
-FILE=C8Printf
+FILE=C9Search
 
 all: a.out
 	@(a.out && echo "Tests passed") || true
