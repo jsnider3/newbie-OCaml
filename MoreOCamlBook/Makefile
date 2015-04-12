@@ -1,4 +1,4 @@
-FILE=C7Args
+FILE=C8Printf
 
 all: a.out
 	@(a.out && echo "Tests passed") || true
