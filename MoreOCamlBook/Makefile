@@ -1,4 +1,4 @@
-FILE=C9Search
+FILE=C10Perms
 
 all: a.out
 	@(a.out && echo "Tests passed") || true
