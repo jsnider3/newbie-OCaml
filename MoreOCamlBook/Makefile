@@ -1,4 +1,4 @@
-FILE=C10Perms
+FILE=C11Sets
 
 all: a.out
 	@(a.out && echo "Tests passed") || true
@@ -21,4 +21,5 @@ ${FILE}.mli: ${FILE}.ml
 
 clean:
 	@rm a.out *.mli *.cmx *.cmi *.o tests 2>/dev/null || true
+	@echo "Cleaning"
 
