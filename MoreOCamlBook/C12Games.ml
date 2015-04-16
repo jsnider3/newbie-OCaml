@@ -16,8 +16,8 @@ let won [a; b; c; d; e; f; g; h; i] =
   b && e && h || c && f && i || a && e && i || c && e && g;;
 
 let empties b =
-  List.map (List.filter (List.zip_exn b [1;2;3;4;5;6;7;8;9])
-    (fun (t, _) -> t = E)) snd;;
+  List.filter (List.mapi b 
+    (fun i t -> if t = E then i+1 else 0)) ((<>) 0);;
 
 let replace turn board p =
   take board (p - 1) @ [turn] @ drop board p;;
