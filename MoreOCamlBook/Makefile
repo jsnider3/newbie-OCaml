@@ -1,4 +1,4 @@
-FILE=C11Sets
+FILE=C12Games
 
 all: a.out
 	@(a.out && echo "Tests passed") || true
