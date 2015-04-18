@@ -1,4 +1,4 @@
-FILE=C12Games
+FILE=pdf
 
 all: a.out
 	@(a.out && echo "Tests passed") || true
