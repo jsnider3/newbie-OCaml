@@ -180,10 +180,11 @@ let rec typecheck expr env = match expr with
     end
   |Record fields ->
     TRecord (List.Assoc.map fields (fun a -> typecheck a env))
-  |GetRec (str, Record fields) -> 
+  |GetRec (str, a) -> 
     begin
+    let TRecord fields = typecheck a env in
     match List.Assoc.find fields str with
-      Some x -> typecheck x env
+      Some x -> x
       |None -> TBottom
     end
   |SetRec (var, field, expr) -> 
@@ -203,7 +204,7 @@ let rec typecheck expr env = match expr with
       |(TList ty, TReal) -> typecheck expr env; TList ty
       |k -> invalid_arg "Invalid list index." 
     end
-  |_ -> invalid_arg "Not a valid expression."
+  |a -> invalid_arg ("Not a valid expression " ^ string_of_expr a ^ ".")
 
 and typecheck_as (expr, ty) env = match (expr,ty) with
   (*(TL a, TSum (left, right)) -> if subtype(typecheck a env)left
@@ -348,10 +349,11 @@ let rec eval expr state = match expr with
           end
       |_ -> invalid_arg "Not a number index"
     end
-  |GetRec (str, Record fields) -> 
+  |GetRec (str, a) -> 
     begin
+    let VRecord fields = eval a state in
     match List.Assoc.find fields str with
-      Some x -> eval x state
+      Some x -> x
       |None -> raise (Failure "Non-existent field")
     end
   |SetRec (var, field, expr) -> 

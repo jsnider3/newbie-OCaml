@@ -1,4 +1,4 @@
 {
   rec = { "min" : 1 ,"max" : 5};
-  rec["test"]
+  rec["min"]
 }

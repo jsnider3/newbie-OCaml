@@ -47,10 +47,12 @@ exp:
     { Equal(e1, e2) }
 | e = exp LBRACK v = q_var RBRACK
     { GetRec(v, e) }
+| e = VAR LBRACK v = q_var RBRACK
+    { GetRec(v,Lookup(e)) }
 | e1 = exp LBRACK e2 = exp RBRACK
     { Get(e2, e1) }
 | v = VAR
-    {printf "lookup %s\n" v; Lookup v }
+    { Lookup v }
 | l = exp LPAREN a = exp RPAREN
     { App(l, a) }
 | FUNC v = VAR COLON t = type_t a = exp 
@@ -120,7 +122,7 @@ fields:
 
 q_var:
 | QUOTE v = VAR QUOTE
-    { printf "%s\n" v; v }
+    { v }
 
 var_typed:
 | v = q_var COLON e = type_t

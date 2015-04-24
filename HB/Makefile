@@ -25,4 +25,4 @@ lexer.ml: lexer.mll
 	ocamllex lexer.mll
 
 clean:
-	@rm 498 *.o *.cmi *.cmx lexer.ml parser.ml parser.mli 2>/dev/null || true
+	@rm HB *.o *.cmi *.cmx lexer.ml parser.ml parser.mli 2>/dev/null || true
