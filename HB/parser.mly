@@ -10,7 +10,7 @@
 %token <bool> BOOL
 %token <string> VAR
 %token PLUS MINUS TIMES 
-%token CAT FUNC
+%token CAT FUNC WHILE
 %token SEMI COMMA COLON ASSIGN QUOTE
 %token EQUAL NOT AND OR NEQ LESS GRE LEQ GEQ
 %token IF THEN ELSE
@@ -57,6 +57,8 @@ exp:
     { App(l, a) }
 | FUNC v = VAR COLON t = type_t a = exp 
     { Lam(t, v, a) }
+| WHILE LPAREN e = exp RPAREN LCURL a = exp RCURL
+    { While(e, a) }
 | LPAREN e = exp RPAREN
     { e }
 | LPAREN RPAREN
