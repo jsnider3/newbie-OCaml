@@ -45,6 +45,8 @@ rule token = parse
     {OR}
 | "!"
     {NOT}
+| "while"
+    {WHILE}
 | ['0'-'9']+ as i
     { INT (int_of_string i) }
 | ['0'-'9']*'.'['0'-'9']+ as f

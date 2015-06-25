@@ -3,6 +3,14 @@ open Core.Std
 open Defs
 open Printf
 
+(*
+  TODO:
+  print,
+  casting,
+  closures,
+  multi-arg functions
+*)
+
 let rec string_of_kind arg = match arg with
   TInt -> "Int"
   |TReal -> "Real"
@@ -15,56 +23,57 @@ let rec string_of_kind arg = match arg with
   |TBottom -> "Bottom"
 
 let rec string_of_expr arg = match arg with
-  N a -> "N " ^ string_of_int a
-  |F f -> "F " ^ Float.to_string f
-  |B b -> "B " ^ string_of_bool b
-  |Add (a, b) -> "Add(" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ ")"
-  |Mul (a, b) -> "Mul(" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ ")"
-  |Sub (a, b) -> "Sub(" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ ")"
-  |Less (a, b) -> "Less(" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ ")"
-  |And (a, b) -> "And(" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ ")"
-  |Or (a, b) -> "Or(" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ ")"
-  |Not a -> "Not(" ^ string_of_expr a ^ ")"
+  N a -> string_of_int a
+  |F f -> Float.to_string f
+  |B b -> string_of_bool b
+  |Add (a, b) -> "(" ^ string_of_expr a ^ " + " ^ string_of_expr b ^ ")"
+  |Mul (a, b) -> "(" ^ string_of_expr a ^ " * " ^ string_of_expr b ^ ")"
+  |Sub (a, b) -> "(" ^ string_of_expr a ^ " - " ^ string_of_expr b ^ ")"
+  |Less (a, b) -> "(" ^ string_of_expr a ^ " < " ^ string_of_expr b ^ ")"
+  |And (a, b) -> "(" ^ string_of_expr a ^ " & " ^ string_of_expr b ^ ")"
+  |Or (a, b) -> "(" ^ string_of_expr a ^ " | " ^ string_of_expr b ^ ")"
+  |Not a -> "!(" ^ string_of_expr a ^ ")"
   |If (a, b, c)-> "(If " ^ string_of_expr a ^ " then " ^ string_of_expr b ^
                        " else " ^ string_of_expr c ^ ")"
-  |Equal (a, b) -> "Equal(" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ ")"
+  |Equal (a, b) -> "(" ^ string_of_expr a ^ " = " ^ string_of_expr b ^ ")"
   |Lam (a, b, c) -> "Lam(" ^ string_of_kind a ^ ", " ^ b ^ ", " ^
                       string_of_expr c ^ ")"
   |App (a, b) -> "App(" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ ")"
-  |List a -> "List[" ^ String.concat ~sep:", " (List.map a string_of_expr )
+  |List a -> "[" ^ String.concat ~sep:", " (List.map a string_of_expr )
                 ^ "]"
   |Unit -> "()"
   |Top -> "T"
   |Bottom -> "Bottom"
-  |Concat (a, b) -> "Concat(" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ ")"
-  |Get (a, b) -> "Get(" ^ string_of_expr a ^ ", " ^ string_of_expr b ^ ")"
-  |GetRec (a, b) -> "GetRec(" ^ a ^ "," ^ string_of_expr b ^ ")"
-  |SetRec (a, b, c) -> a ^ "[" ^ b ^ "] <- " ^ string_of_expr c 
-  |SetInd (a, b, c) -> a ^ "[" ^ string_of_expr b ^ "] <- " ^ string_of_expr c 
-  |As (a, b) -> "As(" ^ string_of_expr a ^ ", kind)"
-  |Lookup a -> "Lookup " ^ a
-  |While (a, b) -> "While(" ^ string_of_expr a ^ "," ^ string_of_expr b ^ ")"
-  |Record fields -> "Record[" ^ String.concat ~sep:", " 
-                      (List.map fields (fun field -> fst field ^ " = " ^
+  |Concat (a, b) -> "(" ^ string_of_expr a ^ " ++ " ^ string_of_expr b ^ ")"
+  |Get (a, b) -> "(" ^ string_of_expr b ^ "[" ^ string_of_expr a ^ "])" 
+  |GetRec (a, b) -> "(" ^ string_of_expr b ^ "[" ^ a ^ "])" 
+  |SetRec (a, b, c) -> "(" ^ a ^ "[" ^ b ^ "] <- " ^ string_of_expr c ^")"
+  |SetInd (a, b, c) -> "(" ^ a ^ "[" ^ string_of_expr b ^ "] <- " ^ 
+		string_of_expr c ^ ")"
+  |As (a, b) -> "As(" ^ string_of_expr a ^ ", " ^ string_of_kind b ^ ")"
+  |Lookup a -> a
+  |While (a, b) -> "while (" ^ string_of_expr a ^ ") {" ^ string_of_expr b ^ "}"
+  |Record fields -> "{" ^ String.concat ~sep:", " 
+                      (List.map fields (fun field -> fst field ^ " : " ^
                         string_of_expr (snd field))) ^ "]"
-  |Seq a -> "Sequence[" ^ String.concat ~sep:"; " (List.map a (string_of_expr)) 
-              ^ "]"
-  |Set (s, x) -> "Set (" ^ s ^ ", " ^ string_of_expr x ^ ")"
+  |Seq a -> "{" ^ String.concat ~sep:"; " 
+    (List.map a (fun a -> "\n  " ^ string_of_expr a)) ^ "\n}"
+  |Set (s, x) -> s ^ " <- " ^ string_of_expr x
 
 let rec string_of_val arg = match arg with
   VN a -> "VN " ^ string_of_int a
   |VF f -> "VF " ^ Float.to_string f
   |VB b -> "VB " ^ string_of_bool b
-  |VLam (a, b, c) -> "VLam(" ^ string_of_kind a ^ ", " ^ b ^ ", " ^
+  |VLam (a, b, c) -> " fun (" ^ string_of_kind a ^ ", " ^ b ^ ", " ^
                         string_of_expr c ^ ")"
-  |VList a -> "VList[" ^ String.concat ~sep:", " (List.map a string_of_val ) 
+  |VList a -> "[" ^ String.concat ~sep:", " (List.map a string_of_val ) 
                        ^ "]"
   |VUnit -> "()"
   |VTop -> "T"
   |VBottom -> "VBottom"
-  |VRecord fields -> "VRecord[" ^ String.concat ~sep:", " 
-                        (List.map fields (fun field -> fst field ^ " = " ^ 
-                          string_of_val (snd field))) ^ "]"
+  |VRecord fields -> "{" ^ String.concat ~sep:", " 
+                        (List.map fields (fun field -> fst field ^ " : " ^ 
+                          string_of_val (snd field))) ^ "}"
 
 let poly_set = Set.of_list ~comparator:Comparator.Poly.comparator
 
