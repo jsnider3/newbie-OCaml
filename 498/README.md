@@ -1,9 +1,7 @@
 # DEPENDENCIES  
-The Haskell code requires ghc, libghc-mtl-dev, and libghc-parallel-dev.
   The OCaml code requires the Jane Street core library. 
 
 # HOW TO RUN  
-The Haskell interpreter is compiled with ghc Original.hs and run with ./Original.
 The OCaml code is built with make and run as ./tests.
 
 # THE LANGUAGE  
